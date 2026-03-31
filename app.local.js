@@ -1,6 +1,6 @@
-﻿// app.local.js - fallback for file:// running environments. Generated from utils, api and app.
+// app.local.js - fallback for file:// running environments. Generated from utils, api and app.
 
-export const STORAGE_KEYS = {
+const STORAGE_KEYS = {
   accounts: 'nexora.accounts',
   activeAccount: 'nexora.activeAccount',
   favorites: 'nexora.favorites',
@@ -9,7 +9,7 @@ export const STORAGE_KEYS = {
   libraries: 'nexora.libraries'
 };
 
-export function safeParse(value, fallback) {
+function safeParse(value, fallback) {
   try {
     return value ? JSON.parse(value) : fallback;
   } catch {
@@ -17,7 +17,7 @@ export function safeParse(value, fallback) {
   }
 }
 
-export function escapeHtml(value = '') {
+function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;',
     '<': '&lt;',
@@ -27,7 +27,7 @@ export function escapeHtml(value = '') {
   }[char]));
 }
 
-export function slugify(value = '') {
+function slugify(value = '') {
   return String(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -36,7 +36,7 @@ export function slugify(value = '') {
     .replace(/^-+|-+$/g, '');
 }
 
-export function formatRuntime(value) {
+function formatRuntime(value) {
   const total = Number(value || 0);
 
   if (!Number.isFinite(total) || total <= 0) {
@@ -53,7 +53,7 @@ export function formatRuntime(value) {
   return `${hours}h ${minutes}min`;
 }
 
-export function formatClock(value) {
+function formatClock(value) {
   const total = Math.max(0, Math.floor(Number(value || 0)));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -66,7 +66,7 @@ export function formatClock(value) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function formatUnixDate(value) {
+function formatUnixDate(value) {
   const numeric = Number(value || 0);
 
   if (!numeric) {
@@ -76,7 +76,7 @@ export function formatUnixDate(value) {
   return new Date(numeric * 1000).toLocaleDateString('pt-BR');
 }
 
-export function makePoster(title, tone = '#2e2e2e') {
+function makePoster(title, tone = '#2e2e2e') {
   const safeTitle = escapeHtml(title);
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
@@ -97,7 +97,7 @@ export function makePoster(title, tone = '#2e2e2e') {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
-export function normalizeServer(value) {
+function normalizeServer(value) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
 
   if (!raw) {
@@ -112,22 +112,20 @@ export function normalizeServer(value) {
   return `https://${raw}`;
 }
 
-export function safeArray(value) {
+function safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-export function sortByAdded(items = []) {
+function sortByAdded(items = []) {
   return [...items].sort((a, b) => Number(b.added || 0) - Number(a.added || 0));
 }
 
-export function makeAccountId(server, username) {
+function makeAccountId(server, username) {
   return `acct-${slugify(`${server}-${username}`)}`;
 }
 
 
-import { normalizeServer } from './utils.js';
-
-export function applyProxy(url, proxy) {
+function applyProxy(url, proxy) {
   const trimmedProxy = String(proxy || '').trim();
 
   if (!trimmedProxy) {
@@ -145,7 +143,7 @@ export function applyProxy(url, proxy) {
   return `${trimmedProxy}${url}`;
 }
 
-export function buildApiUrl(account, action = '') {
+function buildApiUrl(account, action = '') {
   const server = normalizeServer(account.server || account.server || '');
   const username = encodeURIComponent(account.username || '');
   const password = encodeURIComponent(account.password || '');
@@ -153,7 +151,7 @@ export function buildApiUrl(account, action = '') {
   return `${server}/player_api.php?username=${username}&password=${password}${action ? `&action=${action}` : ''}`;
 }
 
-export async function fetchJson(url, proxy = '') {
+async function fetchJson(url, proxy = '') {
   let response;
 
   const isHttpOnHttps = typeof window !== 'undefined' && window.location.protocol === 'https:' && /^http:\/\//i.test(url);
@@ -224,45 +222,26 @@ export async function fetchJson(url, proxy = '') {
   }
 }
 
-export function buildMovieUrl(account, item) {
+function buildMovieUrl(account, item) {
   const server = normalizeServer(account.server || '');
   return `${server}/movie/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${item.streamId}.${item.extension || 'mp4'}`;
 }
 
-export function buildLiveUrl(account, item, extension = 'm3u8') {
+function buildLiveUrl(account, item, extension = 'm3u8') {
   const server = normalizeServer(account.server || '');
   return `${server}/live/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${item.streamId}.${extension}`;
 }
 
-export function buildEpisodeUrl(account, episode) {
+function buildEpisodeUrl(account, episode) {
   const server = normalizeServer(account.server || '');
   return `${server}/series/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${episode.id}.${episode.extension || 'mp4'}`;
 }
 
 
-  STORAGE_KEYS,
-  safeParse,
-  escapeHtml,
-  formatRuntime,
-  formatClock,
-  formatUnixDate,
-  makePoster,
-  normalizeServer,
-  safeArray,
-  sortByAdded,
-  makeAccountId
-} from './assets/js/utils.js';
-
-  applyProxy as applyProxyFn,
-  buildApiUrl as buildApiUrlFn,
-  fetchJson as fetchJsonFn,
-  buildMovieUrl as buildMovieUrlFn,
-  buildLiveUrl as buildLiveUrlFn,
-  buildEpisodeUrl as buildEpisodeUrlFn
-} from './assets/js/api.js';
-
 class NexoraApp {
   constructor() {
+    this.queuedAccount = this.loadQueuedAccount();
+
     this.state = {
       view: 'home',
       search: '',
@@ -349,6 +328,18 @@ class NexoraApp {
     };
   }
 
+  loadQueuedAccount() {
+    const queued = safeParse(localStorage.getItem('nexora.queuedAccount'), null);
+
+    if (!queued || !queued.server || !queued.username || !queued.password) {
+      localStorage.removeItem('nexora.queuedAccount');
+      return null;
+    }
+
+    localStorage.removeItem('nexora.queuedAccount');
+    return queued;
+  }
+
   removeLegacyDemoState() {
     let changed = false;
 
@@ -403,6 +394,18 @@ class NexoraApp {
 
   bootstrap() {
     this.renderAccounts();
+
+    if (this.queuedAccount) {
+      this.dom.connectForm?.querySelector('[name="name"]').value = this.queuedAccount.name || '';
+      this.dom.connectForm?.querySelector('[name="server"]').value = this.queuedAccount.server || '';
+      this.dom.connectForm?.querySelector('[name="username"]').value = this.queuedAccount.username || '';
+      this.dom.connectForm?.querySelector('[name="password"]').value = this.queuedAccount.password || '';
+      this.dom.connectForm?.querySelector('[name="proxy"]').value = this.queuedAccount.proxy || '';
+      this.showAuthGate();
+      this.openModal('connectModal');
+      this.showToast('Parâmetros de conta carregados da URL. Clique em Entrar e sincronizar.');
+      return;
+    }
 
     if (!this.state.accounts.length) {
       this.state.activeAccountId = '';

@@ -23,6 +23,8 @@ import {
 
 class NexoraApp {
   constructor() {
+    this.queuedAccount = this.loadQueuedAccount();
+
     this.state = {
       view: 'home',
       search: '',
@@ -109,6 +111,18 @@ class NexoraApp {
     };
   }
 
+  loadQueuedAccount() {
+    const queued = safeParse(localStorage.getItem('nexora.queuedAccount'), null);
+
+    if (!queued || !queued.server || !queued.username || !queued.password) {
+      localStorage.removeItem('nexora.queuedAccount');
+      return null;
+    }
+
+    localStorage.removeItem('nexora.queuedAccount');
+    return queued;
+  }
+
   removeLegacyDemoState() {
     let changed = false;
 
@@ -163,6 +177,18 @@ class NexoraApp {
 
   bootstrap() {
     this.renderAccounts();
+
+    if (this.queuedAccount) {
+      this.dom.connectForm?.querySelector('[name="name"]').value = this.queuedAccount.name || '';
+      this.dom.connectForm?.querySelector('[name="server"]').value = this.queuedAccount.server || '';
+      this.dom.connectForm?.querySelector('[name="username"]').value = this.queuedAccount.username || '';
+      this.dom.connectForm?.querySelector('[name="password"]').value = this.queuedAccount.password || '';
+      this.dom.connectForm?.querySelector('[name="proxy"]').value = this.queuedAccount.proxy || '';
+      this.showAuthGate();
+      this.openModal('connectModal');
+      this.showToast('Parâmetros de conta carregados da URL. Clique em Entrar e sincronizar.');
+      return;
+    }
 
     if (!this.state.accounts.length) {
       this.state.activeAccountId = '';
