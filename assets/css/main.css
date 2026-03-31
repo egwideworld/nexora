@@ -345,15 +345,6 @@ code {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 
-.media-row::-webkit-scrollbar {
-  height: 8px;
-}
-
-.media-row::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-}
-
 .media-card {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1365,42 +1356,13 @@ body.app-locked .page-shell {
   border-radius: 16px;
 }
 
-.nav-group,
-.media-row {
-  scrollbar-width: none;
-}
-
-.nav-group::-webkit-scrollbar,
-.media-row::-webkit-scrollbar,
-.sidebar::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
 * {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none; 
 }
 
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  background-clip: padding-box;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
-  background-clip: padding-box;
+  display: none;
 }
 
 @media (max-width: 1040px) {

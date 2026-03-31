@@ -1,6 +1,6 @@
 import { normalizeServer } from './utils.js';
 
-const DEFAULT_CORS_PROXY = 'https://your-vps-proxy.example.com/?url='; // Replace with your own production proxy
+const DEFAULT_CORS_PROXY = ''; // Replace with your own production proxy
 
 function resolveProxy(proxy) {
   const trimmedProxy = String(proxy || '').trim();

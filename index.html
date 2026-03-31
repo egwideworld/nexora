@@ -32,12 +32,8 @@
       }
 
       const script = document.createElement('script');
-      if (window.location.protocol === 'file:') {
-        script.src = 'app.local.js';
-      } else {
-        script.src = 'app.js';
-        script.type = 'module';
-      }
+      script.src = 'app.js';
+      script.type = 'module';
       script.defer = true;
       document.head.appendChild(script);
     </script>
