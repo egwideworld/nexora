@@ -876,6 +876,9 @@ class NexoraApp {
       id: forcedId || makeAccountId(inputAccount.server, inputAccount.username)
     };
 
+    // Forçar HTTPS em todos os endereços de servidor ao conectar
+    baseAccount.server = normalizeServer(baseAccount.server);
+
     const [profile, liveCategories, vodCategories, seriesCategories, liveStreams, vodStreams, seriesList] = await Promise.all([
       this.fetchJson(this.buildApiUrl(baseAccount), baseAccount.proxy),
       this.fetchJson(this.buildApiUrl(baseAccount, 'get_live_categories'), baseAccount.proxy),

@@ -1,16 +1,4 @@
-export function forceHttpsServer(rawServer) {
-  const clean = String(rawServer || '').trim().replace(/\/\/+$/, '');
-
-  if (!clean) {
-    return '';
-  }
-
-  if (/^https?:\/\//i.test(clean)) {
-    return clean.replace(/^http:\/\//i, 'https://');
-  }
-
-  return `https://${clean}`;
-}
+import { normalizeServer } from './utils.js';
 
 export function applyProxy(url, proxy) {
   const trimmedProxy = String(proxy || '').trim();
@@ -31,7 +19,7 @@ export function applyProxy(url, proxy) {
 }
 
 export function buildApiUrl(account, action = '') {
-  const server = forceHttpsServer(account.server || account.server || '');
+  const server = normalizeServer(account.server || account.server || '');
   const username = encodeURIComponent(account.username || '');
   const password = encodeURIComponent(account.password || '');
 
@@ -41,8 +29,14 @@ export function buildApiUrl(account, action = '') {
 export async function fetchJson(url, proxy = '') {
   let response;
 
+  const isHttpOnHttps = typeof window !== 'undefined' && window.location.protocol === 'https:' && /^http:\/\//i.test(url);
+  const noProxyProvided = !proxy || !String(proxy).trim();
+  let fetchUrl = isHttpOnHttps && noProxyProvided
+    ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+    : applyProxy(url, proxy);
+
   try {
-    response = await fetch(applyProxy(url, proxy), {
+    response = await fetch(fetchUrl, {
       headers: {
         Accept: 'application/json'
       }
@@ -65,16 +59,16 @@ export async function fetchJson(url, proxy = '') {
 }
 
 export function buildMovieUrl(account, item) {
-  const server = forceHttpsServer(account.server || '');
+  const server = normalizeServer(account.server || '');
   return `${server}/movie/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${item.streamId}.${item.extension || 'mp4'}`;
 }
 
 export function buildLiveUrl(account, item, extension = 'm3u8') {
-  const server = forceHttpsServer(account.server || '');
+  const server = normalizeServer(account.server || '');
   return `${server}/live/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${item.streamId}.${extension}`;
 }
 
 export function buildEpisodeUrl(account, episode) {
-  const server = forceHttpsServer(account.server || '');
+  const server = normalizeServer(account.server || '');
   return `${server}/series/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${episode.id}.${episode.extension || 'mp4'}`;
 }

@@ -102,8 +102,9 @@ export function normalizeServer(value) {
     return '';
   }
 
+  // preserve protocol; se vier http, mantém http para o caso do servidor não suportar https.
   if (/^https?:\/\//i.test(raw)) {
-    return raw.replace(/^http:\/\//i, 'https://');
+    return raw;
   }
 
   return `https://${raw}`;
