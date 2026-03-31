@@ -1,0 +1,109 @@
+.modal {
+  overflow: hidden;
+}
+
+.modal::before {
+  content: "";
+  position: absolute;
+  inset: auto -10% -20% auto;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 68%);
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+.modal-card {
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
+    linear-gradient(135deg, rgba(18, 18, 18, 0.96), rgba(10, 10, 10, 0.92));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+}
+
+.modal:not(.hidden) .modal-card {
+  animation: modalRiseIn 220ms ease both;
+}
+
+.modal-header,
+.player-header {
+  position: relative;
+  padding-right: 62px;
+}
+
+.modal-close {
+  top: 12px;
+  right: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.details-card {
+  width: min(920px, 100%);
+}
+
+.player-card {
+  width: min(1140px, 100%);
+}
+
+.details-layout {
+  gap: 22px;
+  align-items: start;
+}
+
+.details-content {
+  display: grid;
+  gap: 10px;
+}
+
+.details-actions {
+  margin-top: 4px;
+}
+
+.episode-item {
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.episode-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.player-header {
+  margin-bottom: 12px;
+}
+
+.player-card .eyebrow,
+.details-card .eyebrow {
+  margin-bottom: 6px;
+}
+
+@keyframes modalRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 760px) {
+  .modal {
+    padding: 10px;
+  }
+
+  .modal-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .details-layout {
+    gap: 16px;
+  }
+}

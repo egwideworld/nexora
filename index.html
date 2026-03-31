@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexora</title>
+    <meta
+      name="description"
+      content="Nexora é uma plataforma IPTV estática, moderna e client-side para GitHub Pages, com suporte a Xtream Codes, favoritos, recentes e progresso salvo localmente."
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="assets/css/ambient.css" />
+    <link rel="stylesheet" href="assets/css/modals.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="noise-layer"></div>
+
+    <section id="authGate" class="auth-gate">
+      <div class="auth-gate-shell">
+        <div class="auth-panel auth-copy-panel">
+          <div class="brand-block auth-brand">
+            <div class="brand-mark">N</div>
+            <div>
+              <h1>Nexora</h1>
+              <p>Acesse seu catálogo</p>
+            </div>
+          </div>
+
+          <p class="eyebrow">Login obrigatório</p>
+          <h2 class="auth-title">Conecte sua conta Xtream Codes</h2>
+          <p class="auth-description">
+            Informe servidor, usuário e senha para acessar seu catálogo.
+          </p>
+        </div>
+
+        <div class="auth-panel auth-form-panel">
+          <p class="eyebrow">Entrar no Nexora</p>
+          <h2>Adicionar primeira conta</h2>
+          <p class="muted">
+            Use a URL do painel Xtream Codes e, se necessário, informe um proxy CORS.
+          </p>
+
+          <form id="authForm" class="form-grid auth-form">
+            <label>
+              <span>Nome de exibição</span>
+              <input name="name" type="text" placeholder="Minha conta principal" />
+            </label>
+
+            <label>
+              <span>URL do servidor</span>
+              <input name="server" type="text" placeholder="https://seu-servidor:8080" required />
+            </label>
+
+            <label>
+              <span>Usuário</span>
+              <input name="username" type="text" placeholder="usuario_xtream" required />
+            </label>
+
+            <label>
+              <span>Senha</span>
+              <input name="password" type="password" placeholder="••••••••" required />
+            </label>
+
+            <label class="full-width">
+              <span>Proxy CORS (opcional)</span>
+              <input name="proxy" type="text" placeholder="https://meu-proxy.com/?url={url}" />
+              <small>Use <code>{url}</code> se o proxy exigir a URL da API codificada.</small>
+            </label>
+
+            <div class="form-actions full-width">
+              <button type="submit" class="primary-btn wide">Entrar e sincronizar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-shell">
+      <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand-block">
+            <div class="brand-mark">N</div>
+            <div>
+              <h1>Nexora</h1>
+              <p>Sua biblioteca</p>
+            </div>
+          </div>
+
+          <div class="sidebar-toolbar">
+            <span id="activeAccountLabel" class="sidebar-active-label">Nenhuma conta conectada</span>
+            <button id="closeSidebarBtn" class="ghost-btn mobile-close" type="button" aria-label="Fechar menu">Fechar</button>
+          </div>
+        </div>
+
+        <div id="sidebarOverviewCard" class="sidebar-section sidebar-overview-card"></div>
+
+        <section class="sidebar-section sidebar-status-card status-bar">
+          <div id="statusPill" class="status-pill ready">Pronto</div>
+          <p id="statusText">
+            Conecte sua conta Xtream Codes para carregar o catálogo real.
+          </p>
+        </section>
+
+        <div class="sidebar-section">
+          <div class="section-heading">
+            <h2>Resumo</h2>
+          </div>
+          <div id="quickStatsGrid" class="quick-stats-grid sidebar-stats-grid"></div>
+        </div>
+
+        <div class="sidebar-section action-stack">
+          <button id="openConnectBtn" class="primary-btn wide">Nova conta Xtream Codes</button>
+          <div class="utility-actions">
+            <button id="importAccountsBtn" class="ghost-btn">Importar</button>
+            <button id="exportAccountsBtn" class="ghost-btn">Exportar</button>
+          </div>
+          <button id="clearProgressBtn" class="ghost-btn wide">Limpar progresso local</button>
+          <input id="importAccountsInput" class="hidden" type="file" accept="application/json" />
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-heading">
+            <h2>Contas</h2>
+            <span id="accountsCounter">1 perfil</span>
+          </div>
+          <div class="sidebar-inline-actions">
+            <button id="refreshAllAccountsBtn" class="ghost-btn wide">Atualizar todas</button>
+          </div>
+          <div id="accountsList" class="accounts-list"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="section-heading">
+            <h2>Conta ativa</h2>
+          </div>
+          <div id="accountSummaryCard" class="account-summary-card"></div>
+        </div>
+
+      </aside>
+
+      <div class="content-shell">
+        <header class="topbar glass-card">
+          <div class="topbar-intro">
+            <button id="mobileMenuBtn" class="ghost-btn mobile-menu-btn" aria-label="Abrir menu">Menu</button>
+            <h2 id="viewHeadline" class="view-headline">Início</h2>
+          </div>
+
+          <div class="topbar-actions">
+            <nav class="nav-group" aria-label="Navegação principal">
+              <button class="nav-link active" data-view="home" aria-label="Início">Início</button>
+              <button class="nav-link" data-view="movies" aria-label="Filmes">Filmes</button>
+              <button class="nav-link" data-view="series" aria-label="Séries">Séries</button>
+              <button class="nav-link" data-view="channels" aria-label="Canais">Canais</button>
+              <button class="nav-link" data-view="favorites" aria-label="Favoritos">Favoritos</button>
+              <button class="nav-link" data-view="recents" aria-label="Recentes">Recentes</button>
+            </nav>
+
+            <label class="search-box" aria-label="Buscar conteúdo">
+              <span>Buscar</span>
+              <input
+                id="searchInput"
+                type="search"
+                placeholder="Buscar filmes, séries ou canais"
+                autocomplete="off"
+              />
+            </label>
+
+            <div id="profilePill" class="profile-pill"></div>
+          </div>
+        </header>
+
+        <main class="main-content">
+          <section id="heroSection" class="hero-card"></section>
+
+          <section id="continueSection" class="row-section hidden">
+            <div class="row-header">
+              <div>
+                <p class="eyebrow">Continuar</p>
+                <h2>Continue de onde parou</h2>
+              </div>
+            </div>
+            <div id="continueRow" class="media-row"></div>
+          </section>
+
+          <div id="rowsContainer" class="rows-container"></div>
+        </main>
+      </div>
+    </div>
+
+    <div id="connectModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card">
+        <button class="ghost-btn modal-close" data-close-modal="connectModal" aria-label="Fechar">
+          Fechar
+        </button>
+
+        <div class="modal-header">
+          <p class="eyebrow">Nova conexão</p>
+          <h2>Adicionar conta Xtream Codes</h2>
+          <p class="muted">
+            Informe a URL do painel, usuário e senha. Ex.: <code>https://painel.exemplo.com:8080</code>
+          </p>
+        </div>
+
+        <form id="connectForm" class="form-grid">
+          <label>
+            <span>Nome de exibição</span>
+            <input name="name" type="text" placeholder="Minha conta principal" />
+          </label>
+
+          <label>
+            <span>URL do servidor</span>
+            <input name="server" type="text" placeholder="https://seu-servidor:8080" required />
+          </label>
+
+          <label>
+            <span>Usuário</span>
+            <input name="username" type="text" placeholder="usuario_xtream" required />
+          </label>
+
+          <label>
+            <span>Senha</span>
+            <input name="password" type="password" placeholder="••••••••" required />
+          </label>
+
+          <label class="full-width">
+            <span>Proxy CORS (opcional)</span>
+            <input
+              name="proxy"
+              type="text"
+              placeholder="https://meu-proxy.com/?url={url}"
+            />
+            <small>
+              Use <code>{url}</code> para substituir a URL da API, se o seu proxy exigir esse formato.
+            </small>
+          </label>
+
+          <div class="form-actions full-width">
+            <button type="submit" class="primary-btn">Salvar e sincronizar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="detailsModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card details-card">
+        <button class="ghost-btn modal-close" data-close-modal="detailsModal" aria-label="Fechar">
+          Fechar
+        </button>
+
+        <div class="details-layout">
+          <img id="detailsPoster" class="details-poster" src="" alt="Poster" />
+
+          <div class="details-content">
+            <p id="detailsType" class="eyebrow">Detalhes</p>
+            <h2 id="detailsTitle">Selecione um item</h2>
+            <p id="detailsMeta" class="muted"></p>
+            <p id="detailsDescription" class="details-description"></p>
+
+            <div id="detailsBadges" class="badges"></div>
+
+            <div class="details-actions">
+              <button id="detailsPlayBtn" class="primary-btn">Assistir</button>
+              <button id="detailsFavoriteBtn" class="ghost-btn">Favoritar</button>
+            </div>
+
+            <div id="detailsEpisodesWrap" class="episodes-wrap hidden">
+              <div class="section-heading">
+                <h3>Episódios</h3>
+                <span>sob demanda</span>
+              </div>
+              <div id="detailsEpisodes" class="episodes-grid"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="playerModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-card player-card">
+        <button class="ghost-btn modal-close" data-close-modal="playerModal" aria-label="Fechar">
+          Fechar
+        </button>
+
+        <div class="player-header">
+          <div>
+            <p class="eyebrow">Reprodução</p>
+            <h2 id="playerTitle">Nexora Player</h2>
+          </div>
+          <p id="playerMeta" class="muted"></p>
+        </div>
+
+        <div id="playerSurface" class="player-surface show-controls">
+          <video id="videoPlayer" playsinline></video>
+          <div class="player-controls-scrim"></div>
+
+          <div id="playerControls" class="player-controls glass-card">
+            <div class="player-progress-wrap">
+              <span id="playerCurrentTime">00:00</span>
+              <input id="playerSeek" type="range" min="0" max="100" value="0" step="0.1" />
+              <span id="playerDuration">00:00</span>
+              <span id="playerLiveBadge" class="player-live-badge hidden">Ao vivo</span>
+            </div>
+
+            <div class="player-controls-row">
+              <div class="player-control-group player-control-group-main">
+                <button id="playerBackBtn" class="ghost-btn player-action-btn" aria-label="Voltar 10 segundos">-10s</button>
+                <button id="playerPlayPauseBtn" class="ghost-btn player-action-btn" aria-label="Play/Pause">Play</button>
+                <button id="playerForwardBtn" class="ghost-btn player-action-btn" aria-label="Avançar 10 segundos">+10s</button>
+              </div>
+
+              <div class="player-control-group player-control-group-right">
+                <div class="player-volume-wrap">
+                  <button id="playerMuteBtn" class="ghost-btn player-action-btn" aria-label="Mutar">Som</button>
+                  <input id="playerVolume" class="player-volume" type="range" min="0" max="1" step="0.05" value="0.85" />
+                </div>
+                <select id="playerSpeedSelect" class="player-speed-select" aria-label="Velocidade">
+                  <option value="0.75">0.75x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+                <button id="playerPipBtn" class="ghost-btn player-action-btn" aria-label="Mini tela">Mini tela</button>
+                <button id="playerFullscreenBtn" class="ghost-btn player-action-btn" aria-label="Tela cheia">Tela cheia</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </body>
+</html>
