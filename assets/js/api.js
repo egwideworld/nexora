@@ -33,10 +33,12 @@ export async function fetchJson(url, proxy = '') {
   const hasProxy = !!proxy && !!String(proxy).trim();
 
   const fallbackProxies = [
-    `https://cors.sh/${encodeURIComponent(url)}`,
+    `https://cors.bridged.cc/?uri=${encodeURIComponent(url)}`,
+    `https://cors-anywhere.herokuapp.com/${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`
+    `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`,
+    `https://cabcor.herokuapp.com/${encodeURIComponent(url)}`
   ];
 
   const requestUrls = [];
