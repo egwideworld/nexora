@@ -1,4 +1,19 @@
-@import url('assets/css/main.css');
+:root {
+  --bg: #050505;
+  --bg-soft: #111111;
+  --panel: rgba(18, 18, 18, 0.92);
+  --panel-2: rgba(28, 28, 28, 0.95);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #f5f5f5;
+  --muted: #b9b9b9;
+  --accent: #ffffff;
+  --accent-soft: #d9d9d9;
+  --success: #c7ffd3;
+  --danger: #ffd1d1;
+  --warning: #ffe9b8;
+  --shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+  --radius: 22px;
+}
 
 * {
   box-sizing: border-box;

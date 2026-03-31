@@ -103,7 +103,7 @@ export function normalizeServer(value) {
   }
 
   if (/^https?:\/\//i.test(raw)) {
-    return raw;
+    return raw.replace(/^http:\/\//i, 'https://');
   }
 
   return `https://${raw}`;

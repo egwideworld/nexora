@@ -12,6 +12,15 @@ import {
   makeAccountId
 } from './assets/js/utils.js';
 
+import {
+  applyProxy as applyProxyFn,
+  buildApiUrl as buildApiUrlFn,
+  fetchJson as fetchJsonFn,
+  buildMovieUrl as buildMovieUrlFn,
+  buildLiveUrl as buildLiveUrlFn,
+  buildEpisodeUrl as buildEpisodeUrlFn
+} from './assets/js/api.js';
+
 class NexoraApp {
   constructor() {
     this.state = {
@@ -771,66 +780,27 @@ class NexoraApp {
   }
 
   applyProxy(url, proxy) {
-    const trimmed = String(proxy || '').trim();
-
-    if (!trimmed) {
-      return url;
-    }
-
-    if (trimmed.includes('{url}')) {
-      return trimmed.replace('{url}', encodeURIComponent(url));
-    }
-
-    if (trimmed.endsWith('=') || trimmed.includes('?url=')) {
-      return `${trimmed}${encodeURIComponent(url)}`;
-    }
-
-    return `${trimmed}${url}`;
+    return applyProxyFn(url, proxy);
   }
 
   buildApiUrl(account, action = '') {
-    const server = normalizeServer(account.server);
-    const username = encodeURIComponent(account.username);
-    const password = encodeURIComponent(account.password);
-    return `${server}/player_api.php?username=${username}&password=${password}${action ? `&action=${action}` : ''}`;
+    return buildApiUrlFn(account, action);
   }
 
   async fetchJson(url, proxy = '') {
-    let response;
-
-    try {
-      response = await fetch(this.applyProxy(url, proxy), {
-        headers: {
-          Accept: 'application/json'
-        }
-      });
-    } catch {
-      throw new Error('A conexão foi bloqueada pelo navegador ou o servidor não respondeu. Verifique a URL, HTTPS e CORS.');
-    }
-
-    if (!response.ok) {
-      throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
-    }
-
-    const text = await response.text();
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error('A resposta da API Xtream Codes não veio em JSON válido.');
-    }
+    return fetchJsonFn(url, proxy);
   }
 
   buildMovieUrl(account, item) {
-    return `${normalizeServer(account.server)}/movie/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${item.streamId}.${item.extension || 'mp4'}`;
+    return buildMovieUrlFn(account, item);
   }
 
   buildLiveUrl(account, item, extension = 'm3u8') {
-    return `${normalizeServer(account.server)}/live/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${item.streamId}.${extension}`;
+    return buildLiveUrlFn(account, item, extension);
   }
 
   buildEpisodeUrl(account, episode) {
-    return `${normalizeServer(account.server)}/series/${encodeURIComponent(account.username)}/${encodeURIComponent(account.password)}/${episode.id}.${episode.extension || 'mp4'}`;
+    return buildEpisodeUrlFn(account, episode);
   }
 
   mapMovieItem(accountId, account, item, categoryMap) {
