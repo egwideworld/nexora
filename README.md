@@ -11,7 +11,6 @@ Plataforma IPTV estática para navegador, com visual original e neutro, inspirad
 - `favoritos`, `recentes` e `progresso de reprodução`
 - persistência local com `localStorage`
 - login obrigatório com `Xtream Codes` desde a primeira abertura
-- compatível com hospedagem estática no `GitHub Pages`
 
 ## Estrutura
 
