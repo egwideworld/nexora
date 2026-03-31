@@ -30,20 +30,51 @@ export async function fetchJson(url, proxy = '') {
   let response;
 
   const isHttpOnHttps = typeof window !== 'undefined' && window.location.protocol === 'https:' && /^http:\/\//i.test(url);
-  const noProxyProvided = !proxy || !String(proxy).trim();
-  let fetchUrl = isHttpOnHttps && noProxyProvided
-    ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-    : applyProxy(url, proxy);
+  const hasProxy = !!proxy && !!String(proxy).trim();
 
-  try {
-    response = await fetch(fetchUrl, {
-      headers: {
-        Accept: 'application/json'
-      }
-    });
-  } catch (err) {
-    throw new Error('A conexão foi bloqueada pelo navegador ou o servidor não respondeu. Verifique a URL, HTTPS e CORS.');
+  const fallbackProxies = [
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`
+  ];
+
+  const requestUrls = [];
+
+  if (hasProxy) {
+    requestUrls.push(applyProxy(url, proxy));
   }
+
+  if (isHttpOnHttps) {
+    requestUrls.push(...fallbackProxies);
+  } else {
+    requestUrls.push(applyProxy(url, proxy));
+  }
+
+  for (const fetchUrl of requestUrls) {
+    try {
+      response = await fetch(fetchUrl, {
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const text = await response.text();
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error('A conexão foi bloqueada pelo navegador ou o servidor não respondeu. Verifique a URL, HTTPS e CORS.');
 
   if (!response.ok) {
     throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
