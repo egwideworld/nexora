@@ -201,6 +201,53 @@ code {
   color: var(--muted);
 }
 
+.log-panel {
+  min-height: 90px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  color: #e6e6e6;
+}
+
+.loader-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10000;
+}
+
+.loader-overlay.active {
+  display: flex;
+}
+
+.loader-dot {
+  width: 12px;
+  height: 12px;
+  margin: 0 6px;
+  background: #ffffff;
+  border-radius: 50%;
+  opacity: 0.2;
+  animation: pop 0.8s infinite ease-in-out;
+}
+
+.loader-dot:nth-child(1) { animation-delay: 0s; }
+.loader-dot:nth-child(2) { animation-delay: 0.15s; }
+.loader-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes pop {
+  0%, 100% { transform: scale(1); opacity: 0.2; }
+  50% { transform: scale(1.8); opacity: 1; }
+}
+
 .status-pill {
   padding: 6px 10px;
   border-radius: 999px;

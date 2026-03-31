@@ -685,6 +685,25 @@ class NexoraApp {
       error: 'Erro'
     }[type] || 'Status';
     this.dom.statusText.textContent = text;
+    this.appendLog(`[STATUS] ${text}`);
+  }
+
+  appendLog(message) {
+    if (!this.dom.logPanel) {
+      return;
+    }
+
+    const now = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+    this.dom.logPanel.textContent += `[${now}] ${message}\n`;
+    this.dom.logPanel.scrollTop = this.dom.logPanel.scrollHeight;
+  }
+
+  showLoader(show = true) {
+    if (!this.dom.loaderOverlay) {
+      return;
+    }
+
+    this.dom.loaderOverlay.classList.toggle('active', show);
   }
 
   updateStatusForCurrentAccount() {
@@ -748,6 +767,9 @@ class NexoraApp {
   }
 
   async handleConnect(formElement = this.dom.connectForm) {
+    this.showLoader(true);
+    this.appendLog('Iniciando tentativa de conexão...');
+
     const formData = new FormData(formElement);
     const accountInput = {
       name: String(formData.get('name') || '').trim(),
@@ -802,6 +824,8 @@ class NexoraApp {
       if (submitButton) {
         submitButton.disabled = false;
       }
+      this.showLoader(false);
+      this.appendLog('Finalizada tentativa de conexão.');
     }
   }
 

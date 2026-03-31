@@ -1,21 +1,40 @@
 import { normalizeServer } from './utils.js';
 
-export function applyProxy(url, proxy) {
+const DEFAULT_CORS_PROXY = 'https://your-vps-proxy.example.com/?url='; // Replace with your own production proxy
+
+function resolveProxy(proxy) {
   const trimmedProxy = String(proxy || '').trim();
 
-  if (!trimmedProxy) {
+  if (trimmedProxy) {
+    return trimmedProxy;
+  }
+
+  if (typeof window !== 'undefined') {
+    const saved = window.localStorage.getItem('nexora.defaultProxy') || '';
+    if (saved.trim()) {
+      return saved.trim();
+    }
+  }
+
+  return DEFAULT_CORS_PROXY;
+}
+
+export function applyProxy(url, proxy) {
+  const effectiveProxy = resolveProxy(proxy);
+
+  if (!effectiveProxy) {
     return url;
   }
 
-  if (trimmedProxy.includes('{url}')) {
-    return trimmedProxy.replace('{url}', encodeURIComponent(url));
+  if (effectiveProxy.includes('{url}')) {
+    return effectiveProxy.replace('{url}', encodeURIComponent(url));
   }
 
-  if (trimmedProxy.endsWith('=') || trimmedProxy.includes('?url=')) {
-    return `${trimmedProxy}${encodeURIComponent(url)}`;
+  if (effectiveProxy.endsWith('=') || effectiveProxy.includes('?url=')) {
+    return `${effectiveProxy}${encodeURIComponent(url)}`;
   }
 
-  return `${trimmedProxy}${url}`;
+  return `${effectiveProxy}${url}`;
 }
 
 export function buildApiUrl(account, action = '') {
@@ -27,10 +46,7 @@ export function buildApiUrl(account, action = '') {
 }
 
 export async function fetchJson(url, proxy = '') {
-  let response;
-
   const isHttpOnHttps = typeof window !== 'undefined' && window.location.protocol === 'https:' && /^http:\/\//i.test(url);
-  const hasProxy = !!proxy && !!String(proxy).trim();
 
   const fallbackProxies = [
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
@@ -46,55 +62,41 @@ export async function fetchJson(url, proxy = '') {
     `https://cors.taskcluster.net/${encodeURIComponent(url)}`
   ];
 
-  const requestUrls = [];
-
-  if (hasProxy) {
-    requestUrls.push(applyProxy(url, proxy));
-  }
+  const requestUrls = [applyProxy(url, proxy)];
 
   if (isHttpOnHttps) {
     requestUrls.push(...fallbackProxies);
-  } else {
-    requestUrls.push(applyProxy(url, proxy));
   }
 
-  for (const fetchUrl of requestUrls) {
+  let lastError = null;
+
+  for (const requestUrl of requestUrls) {
     try {
-      response = await fetch(fetchUrl, {
+      const response = await fetch(requestUrl, {
         headers: {
           Accept: 'application/json'
         }
       });
 
       if (!response.ok) {
+        lastError = new Error(`O servidor respondeu com HTTP ${response.status}.`);
         continue;
       }
 
       const text = await response.text();
-
       try {
         return JSON.parse(text);
-      } catch {
+      } catch (parseError) {
+        lastError = new Error('A resposta da API Xtream Codes não veio em JSON válido.');
         continue;
       }
-    } catch {
+    } catch (error) {
+      lastError = error;
       continue;
     }
   }
 
-  throw new Error('A conexão foi bloqueada pelo navegador ou o servidor não respondeu. Verifique a URL, HTTPS e CORS.');
-
-  if (!response.ok) {
-    throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
-  }
-
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error('A resposta da API Xtream Codes não veio em JSON válido.');
-  }
+  throw lastError || new Error('A conexão foi bloqueada pelo navegador ou o servidor não respondeu. Verifique a URL, HTTPS e CORS.');
 }
 
 export function buildMovieUrl(account, item) {
