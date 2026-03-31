@@ -395,12 +395,20 @@ class NexoraApp {
   bootstrap() {
     this.renderAccounts();
 
-    if (this.queuedAccount) {
-      this.dom.connectForm?.querySelector('[name="name"]').value = this.queuedAccount.name || '';
-      this.dom.connectForm?.querySelector('[name="server"]').value = this.queuedAccount.server || '';
-      this.dom.connectForm?.querySelector('[name="username"]').value = this.queuedAccount.username || '';
-      this.dom.connectForm?.querySelector('[name="password"]').value = this.queuedAccount.password || '';
-      this.dom.connectForm?.querySelector('[name="proxy"]').value = this.queuedAccount.proxy || '';
+    if (this.queuedAccount && this.dom.connectForm) {
+      const form = this.dom.connectForm;
+      const nameInput = form.querySelector('[name="name"]');
+      const serverInput = form.querySelector('[name="server"]');
+      const usernameInput = form.querySelector('[name="username"]');
+      const passwordInput = form.querySelector('[name="password"]');
+      const proxyInput = form.querySelector('[name="proxy"]');
+
+      if (nameInput) nameInput.value = this.queuedAccount.name || '';
+      if (serverInput) serverInput.value = this.queuedAccount.server || '';
+      if (usernameInput) usernameInput.value = this.queuedAccount.username || '';
+      if (passwordInput) passwordInput.value = this.queuedAccount.password || '';
+      if (proxyInput) proxyInput.value = this.queuedAccount.proxy || '';
+
       this.showAuthGate();
       this.openModal('connectModal');
       this.showToast('Parâmetros de conta carregados da URL. Clique em Entrar e sincronizar.');
