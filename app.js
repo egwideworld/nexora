@@ -3,7 +3,6 @@ import {
   safeParse,
   escapeHtml,
   formatRuntime,
-  formatClock,
   formatUnixDate,
   makePoster,
   normalizeServer,
@@ -21,29 +20,53 @@ import {
   buildEpisodeUrl as buildEpisodeUrlFn
 } from './assets/js/api.js';
 
+import {
+  loadInitialState,
+  removeLegacyDemoState,
+  persistLibraries,
+  persistObject,
+  persistValue
+} from './assets/js/store.js';
+
+import { createViewRenderer } from './assets/js/views.js';
+import { createPlayerController } from './assets/js/player.js';
+
 class NexoraApp {
   constructor() {
     this.queuedAccount = this.loadQueuedAccount();
 
-    this.state = {
-      view: 'home',
-      search: '',
-      accounts: safeParse(localStorage.getItem(STORAGE_KEYS.accounts), []),
-      activeAccountId: localStorage.getItem(STORAGE_KEYS.activeAccount) || '',
-      favorites: safeParse(localStorage.getItem(STORAGE_KEYS.favorites), {}),
-      progress: safeParse(localStorage.getItem(STORAGE_KEYS.progress), {}),
-      recents: safeParse(localStorage.getItem(STORAGE_KEYS.recents), []),
-      libraries: safeParse(localStorage.getItem(STORAGE_KEYS.libraries), {}),
-      currentLibrary: null,
-      currentPlayback: null,
-      hls: null,
-      lastProgressSave: 0
-    };
+    const initialState = loadInitialState();
+    const { state, changed } = removeLegacyDemoState(initialState);
 
-    this.removeLegacyDemoState();
+    if (changed) {
+      persistObject(STORAGE_KEYS.favorites, state.favorites);
+      persistObject(STORAGE_KEYS.recents, state.recents);
+      persistObject(STORAGE_KEYS.progress, state.progress);
+      persistLibraries(state, STORAGE_KEYS);
+      persistValue(STORAGE_KEYS.activeAccount, state.activeAccountId || '');
+    }
+
+    this.state = state;
     this.dom = this.collectDom();
+    this.views = createViewRenderer({ dom: this.dom, getState: () => this.state });
+    this.player = createPlayerController({ 
+      dom: this.dom, 
+      getState: () => this.state, 
+      setState: (s) => Object.assign(this.state, s),
+      closeModal: (id) => this.closeModal(id)
+    });
     this.bindEvents();
     this.bootstrap();
+  }
+
+  loadQueuedAccount() {
+    const queued = safeParse(localStorage.getItem('nexora.queuedAccount'), null);
+    if (!queued || !queued.server || !queued.username || !queued.password) {
+      localStorage.removeItem('nexora.queuedAccount');
+      return null;
+    }
+    localStorage.removeItem('nexora.queuedAccount');
+    return queued;
   }
 
   collectDom() {
@@ -52,6 +75,11 @@ class NexoraApp {
       contentShell: document.querySelector('.content-shell'),
       authGate: document.getElementById('authGate'),
       authForm: document.getElementById('authForm'),
+      authFormContainer: document.getElementById('authFormContainer'),
+      accountSelector: document.getElementById('accountSelector'),
+      accountSelectorGrid: document.getElementById('accountSelectorGrid'),
+      addNewAccountBtn: document.getElementById('addNewAccountBtn'),
+      loaderOverlay: document.getElementById('loaderOverlay'),
       heroSection: document.getElementById('heroSection'),
       rowsContainer: document.getElementById('rowsContainer'),
       continueSection: document.getElementById('continueSection'),
@@ -111,72 +139,72 @@ class NexoraApp {
     };
   }
 
-  loadQueuedAccount() {
-    const queued = safeParse(localStorage.getItem('nexora.queuedAccount'), null);
-
-    if (!queued || !queued.server || !queued.username || !queued.password) {
-      localStorage.removeItem('nexora.queuedAccount');
-      return null;
-    }
-
-    localStorage.removeItem('nexora.queuedAccount');
-    return queued;
-  }
-
-  removeLegacyDemoState() {
-    let changed = false;
-
-    if (this.state.libraries.demo) {
-      delete this.state.libraries.demo;
-      changed = true;
-    }
-
-    if (this.state.favorites.demo) {
-      delete this.state.favorites.demo;
-      changed = true;
-    }
-
-    const filteredRecents = this.state.recents.filter((item) => item.accountId !== 'demo');
-    if (filteredRecents.length !== this.state.recents.length) {
-      this.state.recents = filteredRecents;
-      changed = true;
-    }
-
-    const filteredProgress = Object.fromEntries(
-      Object.entries(this.state.progress).filter(([, value]) => value.accountId !== 'demo')
-    );
-
-    if (Object.keys(filteredProgress).length !== Object.keys(this.state.progress).length) {
-      this.state.progress = filteredProgress;
-      changed = true;
-    }
-
-    if (this.state.activeAccountId === 'demo') {
-      this.state.activeAccountId = this.state.accounts[0]?.id || '';
-      changed = true;
-    }
-
-    if (changed) {
-      this.persistObject(STORAGE_KEYS.favorites, this.state.favorites);
-      this.persistObject(STORAGE_KEYS.recents, this.state.recents);
-      this.persistObject(STORAGE_KEYS.progress, this.state.progress);
-      this.persistLibraries();
-      this.persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
-    }
-  }
-
   showAuthGate() {
     this.dom.authGate?.classList.remove('hidden');
     document.body.classList.add('app-locked');
+    
+    this.renderAccountSelector();
+  }
+
+  renderAccountSelector() {
+    const accounts = this.state.accounts;
+    
+    if (!accounts.length) {
+      this.showAuthForm();
+      return;
+    }
+    
+    this.dom.accountSelector?.classList.remove('hidden');
+    this.dom.authFormContainer?.classList.add('hidden');
+    
+    if (this.dom.accountSelectorGrid) {
+      this.dom.accountSelectorGrid.innerHTML = accounts.map(account => {
+        const initial = account.name ? account.name.charAt(0).toUpperCase() : '?';
+        const serverDisplay = account.server ? new URL(account.server).hostname : '';
+        const statusLabel = account.status || 'offline';
+        const expLabel = account.expDate ? new Date(account.expDate * 1000).toLocaleDateString('pt-BR') : 'não informado';
+        
+        return `
+          <button class="account-select-card" data-select-account="${escapeHtml(account.id)}">
+            <div class="account-select-avatar">${initial}</div>
+            <div class="account-select-info">
+              <strong>${escapeHtml(account.name)}</strong>
+              <span class="account-select-server">${escapeHtml(serverDisplay)}</span>
+              <div class="account-select-meta">
+                <span class="account-badge ${statusLabel.toLowerCase()}">${escapeHtml(statusLabel)}</span>
+                <span class="account-exp">Exp: ${escapeHtml(expLabel)}</span>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+    }
+    
+    this.dom.addNewAccountBtn?.addEventListener('click', () => this.showAuthForm());
+    
+    this.dom.accountSelectorGrid?.querySelectorAll('[data-select-account]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const accountId = btn.dataset.selectAccount;
+        this.switchAccount(accountId);
+        this.hideAuthGate();
+      });
+    });
+  }
+
+  showAuthForm() {
+    this.dom.accountSelector?.classList.add('hidden');
+    this.dom.authFormContainer?.classList.remove('hidden');
   }
 
   hideAuthGate() {
-    this.dom.authGate?.classList.add('hidden');
+    if (this.dom.authGate) {
+      this.dom.authGate.classList.add('hidden');
+    }
     document.body.classList.remove('app-locked');
   }
 
   bootstrap() {
-    this.renderAccounts();
+    this.views.renderAccounts(this.state);
 
     if (this.queuedAccount && this.dom.connectForm) {
       const form = this.dom.connectForm;
@@ -201,9 +229,9 @@ class NexoraApp {
     if (!this.state.accounts.length) {
       this.state.activeAccountId = '';
       this.state.currentLibrary = null;
-      this.persistValue(STORAGE_KEYS.activeAccount, '');
+      persistValue(STORAGE_KEYS.activeAccount, '');
       this.showAuthGate();
-      this.render();
+      this.views.render(this.state);
       this.updateStatus('info', 'Conecte sua conta Xtream Codes para entrar no Nexora.');
       return;
     }
@@ -216,10 +244,29 @@ class NexoraApp {
       ? this.state.libraries[this.state.activeAccountId] || null
       : null;
 
-    this.persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
-    this.hideAuthGate();
-    this.render();
+    persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
+    
+    this.showAuthGate();
+    this.restoreSidebarState();
+    this.views.render(this.state);
     this.updateStatusForCurrentAccount();
+  }
+
+  restoreSidebarState() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const sidebar = document.querySelector('.sidebar');
+        const shell = document.querySelector('.page-shell');
+        if (!sidebar) { return; }
+
+        const isOpen = this.state.sidebarOpen;
+        
+        if (!isOpen) {
+          sidebar.classList.add('hidden');
+          shell?.classList.add('sidebar-hidden');
+        }
+      });
+    });
   }
 
   bindEvents() {
@@ -227,14 +274,10 @@ class NexoraApp {
     this.dom.mobileMenuBtn?.addEventListener('click', () => this.toggleSidebar(true));
     this.dom.closeSidebarBtn?.addEventListener('click', () => this.toggleSidebar(false));
     this.dom.sidebarBackdrop?.addEventListener('click', () => this.toggleSidebar(false));
-    this.dom.refreshAllAccountsBtn?.addEventListener('click', async () => {
-      await this.refreshAllAccounts();
-    });
+    this.dom.refreshAllAccountsBtn?.addEventListener('click', async () => { await this.refreshAllAccounts(); });
     this.dom.importAccountsBtn?.addEventListener('click', () => this.dom.importAccountsInput?.click());
     this.dom.exportAccountsBtn?.addEventListener('click', () => this.exportAccounts());
-    this.dom.importAccountsInput?.addEventListener('change', async (event) => {
-      await this.importAccounts(event);
-    });
+    this.dom.importAccountsInput?.addEventListener('change', async (event) => { await this.importAccounts(event); });
     this.dom.clearProgressBtn?.addEventListener('click', () => this.clearPlaybackData());
 
     this.dom.authForm?.addEventListener('submit', async (event) => {
@@ -244,18 +287,57 @@ class NexoraApp {
 
     this.dom.searchInput.addEventListener('input', (event) => {
       this.state.search = event.target.value.trim();
-      this.render();
+      this.views.render(this.state);
     });
 
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 1040) {
-        this.toggleSidebar(false);
+    this.dom.searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        this.state.search = event.target.value.trim();
+        this.views.render(this.state);
+        this.scrollContentTop();
+      }
+      if (event.key === 'Escape') {
+        event.target.value = '';
+        this.state.search = '';
+        this.views.render(this.state);
       }
     });
 
-    document.addEventListener('fullscreenchange', () => {
-      this.pingPlayerControls();
-      this.syncPlayerChrome();
+    document.addEventListener('input', (event) => {
+      if (event.target.matches('[data-category-search]')) {
+        this.state.search = event.target.value.trim();
+        this.views.render(this.state);
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      const keyboardKey = event.target.closest('.keyboard-key');
+      if (keyboardKey) {
+        const letter = keyboardKey.dataset.letter;
+        const searchInput = document.querySelector('[data-category-search]');
+        if (searchInput) {
+          searchInput.value = letter;
+          this.state.search = letter;
+          this.views.render(this.state);
+        }
+      }
+    });
+
+    document.addEventListener('wheel', (event) => {
+      if (event.shiftKey) {
+        event.preventDefault();
+        const container = this.dom.contentShell;
+        if (container) {
+          container.scrollBy({ left: event.deltaY, behavior: 'smooth' });
+        }
+      }
+    }, { passive: false });
+
+    window.addEventListener('resize', () => {
+      // Only auto-close on resize if user previously had it open
+      if (window.innerWidth > 1040 && this.state.sidebarOpen === true) {
+        this.toggleSidebar(false);
+      }
     });
 
     this.dom.connectForm.addEventListener('submit', async (event) => {
@@ -265,62 +347,15 @@ class NexoraApp {
 
     this.dom.detailsPlayBtn.addEventListener('click', async () => {
       const itemId = this.dom.detailsModal.dataset.itemId;
-      if (itemId) {
-        await this.handlePlayItem(itemId);
-      }
+      if (itemId) { await this.handlePlayItem(itemId); }
     });
 
     this.dom.detailsFavoriteBtn.addEventListener('click', () => {
       const itemId = this.dom.detailsModal.dataset.itemId;
-      if (itemId) {
-        this.toggleFavorite(itemId);
-      }
+      if (itemId) { this.toggleFavorite(itemId); }
     });
 
-    this.dom.videoPlayer.addEventListener('timeupdate', () => this.handlePlaybackProgress());
-    this.dom.videoPlayer.addEventListener('ended', () => this.clearFinishedProgress());
-    this.dom.videoPlayer.addEventListener('play', () => this.syncPlayerChrome());
-    this.dom.videoPlayer.addEventListener('pause', () => this.syncPlayerChrome());
-    this.dom.videoPlayer.addEventListener('loadedmetadata', () => this.syncPlayerChrome());
-    this.dom.videoPlayer.addEventListener('durationchange', () => this.syncPlayerChrome());
-    this.dom.videoPlayer.addEventListener('volumechange', () => this.syncPlayerChrome());
-    this.dom.videoPlayer.addEventListener('click', () => this.togglePlayback());
-
-    this.dom.playerSurface?.addEventListener('mousemove', () => this.pingPlayerControls());
-    this.dom.playerSurface?.addEventListener('touchstart', () => this.pingPlayerControls(), { passive: true });
-    this.dom.playerSurface?.addEventListener('mouseleave', () => this.schedulePlayerControlsHide(600));
-
-    this.dom.playerPlayPauseBtn?.addEventListener('click', () => this.togglePlayback());
-    this.dom.playerBackBtn?.addEventListener('click', () => this.seekBy(-10));
-    this.dom.playerForwardBtn?.addEventListener('click', () => this.seekBy(10));
-    this.dom.playerMuteBtn?.addEventListener('click', () => this.toggleMute());
-    this.dom.playerVolume?.addEventListener('input', (event) => {
-      this.dom.videoPlayer.volume = Number(event.target.value || 0);
-      this.dom.videoPlayer.muted = this.dom.videoPlayer.volume === 0;
-      this.syncPlayerChrome();
-    });
-    this.dom.playerSeek?.addEventListener('input', (event) => {
-      if (this.state.currentPlayback?.type === 'channel') {
-        this.syncPlayerChrome();
-        return;
-      }
-
-      const duration = this.dom.videoPlayer.duration || 0;
-      if (duration > 0) {
-        this.dom.videoPlayer.currentTime = (Number(event.target.value || 0) / 100) * duration;
-      }
-      this.syncPlayerChrome();
-    });
-    this.dom.playerSpeedSelect?.addEventListener('change', (event) => {
-      this.dom.videoPlayer.playbackRate = Number(event.target.value || 1);
-      this.showToast(`Velocidade ajustada para ${event.target.value}x.`);
-    });
-    this.dom.playerPipBtn?.addEventListener('click', async () => {
-      await this.togglePictureInPicture();
-    });
-    this.dom.playerFullscreenBtn?.addEventListener('click', async () => {
-      await this.toggleFullscreen();
-    });
+    this.player.bindPlayerEvents(this.dom);
 
     document.addEventListener('click', async (event) => {
       const favoriteButton = event.target.closest('[data-favorite-item]');
@@ -356,7 +391,34 @@ class NexoraApp {
       const nav = event.target.closest('[data-view]');
       if (nav) {
         this.state.view = nav.dataset.view;
-        this.render();
+        this.views.render(this.state);
+        this.scrollContentTop();
+        return;
+      }
+
+      const scrollBtn = event.target.closest('[data-scroll]');
+      if (scrollBtn) {
+        const rowId = scrollBtn.dataset.scroll;
+        const dir = scrollBtn.dataset.dir;
+        const container = document.getElementById(rowId)?.querySelector('.media-row');
+        if (container) {
+          const scrollAmount = container.offsetWidth * 0.7;
+          if (dir === 'left') {
+            container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+          } else {
+            container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+          }
+        }
+        return;
+      }
+
+      const seeMoreBtn = event.target.closest('[data-row-view]');
+      if (seeMoreBtn) {
+        this.state.view = seeMoreBtn.dataset.rowView;
+        if (seeMoreBtn.dataset.category) {
+          this.state.categoryFilter = seeMoreBtn.dataset.category;
+        }
+        this.views.render(this.state);
         this.scrollContentTop();
         return;
       }
@@ -382,7 +444,7 @@ class NexoraApp {
       const closeButton = event.target.closest('[data-close-modal]');
       if (closeButton) {
         if (closeButton.dataset.closeModal === 'playerModal') {
-          this.closePlayer();
+          this.player.closePlayer();
         } else {
           this.closeModal(closeButton.dataset.closeModal);
         }
@@ -396,7 +458,7 @@ class NexoraApp {
       if (event.key === 'Escape') {
         this.closeModal('connectModal');
         this.closeModal('detailsModal');
-        this.closePlayer();
+        this.player.closePlayer();
         return;
       }
 
@@ -406,96 +468,31 @@ class NexoraApp {
 
       if (event.code === 'Space') {
         event.preventDefault();
-        this.togglePlayback();
+        this.player.togglePlayback();
       } else if (event.key === 'ArrowLeft') {
-        this.seekBy(-10);
+        this.player.seekBy(-10);
       } else if (event.key === 'ArrowRight') {
-        this.seekBy(10);
+        this.player.seekBy(10);
       } else if (event.key.toLowerCase() === 'm') {
-        this.toggleMute();
+        this.player.toggleMute();
       } else if (event.key.toLowerCase() === 'f') {
-        this.toggleFullscreen();
+        this.player.toggleFullscreen();
       }
     });
   }
 
-  persistValue(key, value) {
-    try {
-      localStorage.setItem(key, value);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  persistObject(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  persistLibraries() {
-    const ok = this.persistObject(STORAGE_KEYS.libraries, this.state.libraries);
-
-    if (!ok) {
-      const compact = Object.fromEntries(
-        Object.entries(this.state.libraries).map(([id, library]) => [
-          id,
-          {
-            ...library,
-            movies: safeArray(library.movies).slice(0, 120),
-            series: safeArray(library.series).slice(0, 120),
-            channels: safeArray(library.channels).slice(0, 120),
-            compactCache: true
-          }
-        ])
-      );
-
-      this.persistObject(STORAGE_KEYS.libraries, compact);
-    }
-  }
-
   updateStatus(type, text) {
     this.dom.statusPill.className = `status-pill ${type}`;
-    this.dom.statusPill.textContent = {
-      ready: 'Pronto',
-      success: 'Conectado',
-      syncing: 'Sincronizando',
-      info: 'Aviso',
-      error: 'Erro'
-    }[type] || 'Status';
+    this.dom.statusPill.textContent = { ready: 'Pronto', success: 'Conectado', syncing: 'Sincronizando', info: 'Aviso', error: 'Erro' }[type] || 'Status';
     this.dom.statusText.textContent = text;
-    this.appendLog(`[STATUS] ${text}`);
-  }
-
-  appendLog(message) {
-    if (!this.dom.logPanel) {
-      return;
-    }
-
-    const now = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-    this.dom.logPanel.textContent += `[${now}] ${message}\n`;
-    this.dom.logPanel.scrollTop = this.dom.logPanel.scrollHeight;
-  }
-
-  showLoader(show = true) {
-    if (!this.dom.loaderOverlay) {
-      return;
-    }
-    this.dom.loaderOverlay.classList.toggle('active', show);
   }
 
   updateStatusForCurrentAccount() {
     const library = this.state.currentLibrary;
-
     if (!library || !this.state.activeAccountId) {
       this.updateStatus('info', 'Conecte sua conta Xtream Codes para carregar o catálogo real.');
       return;
     }
-
     const syncedAt = new Date(library.fetchedAt || Date.now()).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
     const extra = library.compactCache ? ' Cache local pronto.' : '';
     this.updateStatus('success', `${library.accountName} pronto para assistir · atualizado em ${syncedAt}.${extra}`);
@@ -529,13 +526,11 @@ class NexoraApp {
     this.state.currentLibrary = nextLibrary;
     this.state.search = '';
 
-    if (this.dom.searchInput) {
-      this.dom.searchInput.value = '';
-    }
+    if (this.dom.searchInput) { this.dom.searchInput.value = ''; }
 
-    this.persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
-    this.renderAccounts();
-    this.render();
+    persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
+    this.views.renderAccounts(this.state);
+    this.views.render(this.state);
     this.updateStatusForCurrentAccount();
     this.scrollContentTop();
 
@@ -544,13 +539,10 @@ class NexoraApp {
     } else {
       this.showAuthGate();
     }
-
-    this.toggleSidebar(false);
   }
 
   async handleConnect(formElement = this.dom.connectForm) {
     this.showLoader(true);
-    this.appendLog('Iniciando tentativa de conexão...');
 
     const formData = new FormData(formElement);
     const accountInput = {
@@ -563,13 +555,12 @@ class NexoraApp {
 
     if (!accountInput.server || !accountInput.username || !accountInput.password) {
       this.updateStatus('error', 'Preencha servidor, usuário e senha para continuar.');
+      this.showLoader(false);
       return;
     }
 
     const submitButton = formElement.querySelector('button[type="submit"]');
-    if (submitButton) {
-      submitButton.disabled = true;
-    }
+    if (submitButton) { submitButton.disabled = true; }
 
     this.updateStatus('syncing', 'Consultando a API Xtream Codes e montando o catálogo...');
 
@@ -587,13 +578,13 @@ class NexoraApp {
       this.state.currentLibrary = library;
       this.state.activeAccountId = account.id;
 
-      this.persistObject(STORAGE_KEYS.accounts, this.state.accounts);
-      this.persistValue(STORAGE_KEYS.activeAccount, account.id);
-      this.persistLibraries();
+      persistObject(STORAGE_KEYS.accounts, this.state.accounts);
+      persistValue(STORAGE_KEYS.activeAccount, account.id);
+      persistLibraries(this.state, STORAGE_KEYS);
 
       this.hideAuthGate();
-      this.renderAccounts();
-      this.render();
+      this.views.renderAccounts(this.state);
+      this.views.render(this.state);
       this.updateStatusForCurrentAccount();
       this.closeModal('connectModal');
       this.dom.connectForm.reset();
@@ -602,19 +593,14 @@ class NexoraApp {
     } catch (error) {
       this.updateStatus('error', error.message || 'Não foi possível sincronizar a conta.');
       this.showToast('Falha ao conectar a conta Xtream Codes.');
-      this.appendLog(`[ERRO] ${error.message || 'Erro desconhecido'}`);
     } finally {
-      if (submitButton) {
-        submitButton.disabled = false;
-      }
+      if (submitButton) { submitButton.disabled = false; }
       this.showLoader(false);
-      this.appendLog('Finalizada tentativa de conexão.');
     }
   }
 
   async refreshAccount(accountId) {
     const account = this.getAccountById(accountId);
-
     if (!account) {
       this.updateStatus('info', 'Cadastre uma conta Xtream Codes para atualizar o catálogo.');
       return;
@@ -626,16 +612,16 @@ class NexoraApp {
       const { library } = await this.connectXtreamAccount(account, account.id);
       this.state.libraries[account.id] = library;
       account.lastSyncedAt = Date.now();
-      this.persistObject(STORAGE_KEYS.accounts, this.state.accounts);
-      this.persistLibraries();
+      persistObject(STORAGE_KEYS.accounts, this.state.accounts);
+      persistLibraries(this.state, STORAGE_KEYS);
 
       if (this.state.activeAccountId === account.id) {
         this.state.currentLibrary = library;
-        this.render();
+        this.views.render(this.state);
         this.updateStatusForCurrentAccount();
       }
 
-      this.renderAccounts();
+      this.views.renderAccounts(this.state);
       this.showToast('Catálogo atualizado.');
     } catch (error) {
       this.updateStatus('error', error.message || 'Não foi possível atualizar esta conta.');
@@ -644,7 +630,6 @@ class NexoraApp {
 
   async refreshAllAccounts() {
     const accounts = safeArray(this.state.accounts);
-
     if (!accounts.length) {
       this.showToast('Nenhuma conta real salva para atualizar.');
       return;
@@ -664,11 +649,11 @@ class NexoraApp {
       }
     }
 
-    this.persistObject(STORAGE_KEYS.accounts, this.state.accounts);
-    this.persistLibraries();
+    persistObject(STORAGE_KEYS.accounts, this.state.accounts);
+    persistLibraries(this.state, STORAGE_KEYS);
     this.state.currentLibrary = this.state.libraries[this.state.activeAccountId] || this.state.libraries[this.state.accounts[0]?.id] || null;
-    this.renderAccounts();
-    this.render();
+    this.views.renderAccounts(this.state);
+    this.views.render(this.state);
 
     if (failures.length) {
       this.updateStatus('info', `Atualização concluída com ${failures.length} aviso(s).`);
@@ -681,16 +666,11 @@ class NexoraApp {
   }
 
   removeAccount(accountId) {
-    if (!accountId) {
-      return;
-    }
+    if (!accountId) { return; }
 
     const account = this.getAccountById(accountId);
     const confirmed = window.confirm(`Remover a conta ${account?.name || accountId} do Nexora?`);
-
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) { return; }
 
     this.state.accounts = this.state.accounts.filter((item) => item.id !== accountId);
     delete this.state.libraries[accountId];
@@ -709,15 +689,15 @@ class NexoraApp {
       ? this.state.libraries[this.state.activeAccountId] || null
       : null;
 
-    this.persistObject(STORAGE_KEYS.accounts, this.state.accounts);
-    this.persistObject(STORAGE_KEYS.favorites, this.state.favorites);
-    this.persistObject(STORAGE_KEYS.recents, this.state.recents);
-    this.persistObject(STORAGE_KEYS.progress, this.state.progress);
-    this.persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
-    this.persistLibraries();
+    persistObject(STORAGE_KEYS.accounts, this.state.accounts);
+    persistObject(STORAGE_KEYS.favorites, this.state.favorites);
+    persistObject(STORAGE_KEYS.recents, this.state.recents);
+    persistObject(STORAGE_KEYS.progress, this.state.progress);
+    persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
+    persistLibraries(this.state, STORAGE_KEYS);
 
-    this.renderAccounts();
-    this.render();
+    this.views.renderAccounts(this.state);
+    this.views.render(this.state);
 
     if (this.state.currentLibrary) {
       this.hideAuthGate();
@@ -758,10 +738,7 @@ class NexoraApp {
 
   async importAccounts(event) {
     const file = event.target?.files?.[0];
-
-    if (!file) {
-      return;
-    }
+    if (!file) { return; }
 
     try {
       const text = await file.text();
@@ -795,15 +772,15 @@ class NexoraApp {
       }
 
       this.state.currentLibrary = this.state.libraries[this.state.activeAccountId] || null;
-      this.persistObject(STORAGE_KEYS.accounts, this.state.accounts);
-      this.persistObject(STORAGE_KEYS.favorites, this.state.favorites);
-      this.persistObject(STORAGE_KEYS.progress, this.state.progress);
-      this.persistObject(STORAGE_KEYS.recents, this.state.recents);
-      this.persistLibraries();
-      this.persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
+      persistObject(STORAGE_KEYS.accounts, this.state.accounts);
+      persistObject(STORAGE_KEYS.favorites, this.state.favorites);
+      persistObject(STORAGE_KEYS.progress, this.state.progress);
+      persistObject(STORAGE_KEYS.recents, this.state.recents);
+      persistLibraries(this.state, STORAGE_KEYS);
+      persistValue(STORAGE_KEYS.activeAccount, this.state.activeAccountId || '');
       this.hideAuthGate();
-      this.renderAccounts();
-      this.render();
+      this.views.renderAccounts(this.state);
+      this.views.render(this.state);
       this.updateStatusForCurrentAccount();
       this.showToast('Contas importadas com sucesso.');
     } catch (error) {
@@ -820,9 +797,7 @@ class NexoraApp {
     }
 
     const confirmed = window.confirm('Limpar progresso, recentes e favoritos da conta ativa?');
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) { return; }
 
     delete this.state.favorites[this.state.activeAccountId];
     this.state.recents = this.state.recents.filter((item) => item.accountId !== this.state.activeAccountId);
@@ -830,36 +805,19 @@ class NexoraApp {
       Object.entries(this.state.progress).filter(([, value]) => value.accountId !== this.state.activeAccountId)
     );
 
-    this.persistObject(STORAGE_KEYS.favorites, this.state.favorites);
-    this.persistObject(STORAGE_KEYS.recents, this.state.recents);
-    this.persistObject(STORAGE_KEYS.progress, this.state.progress);
-    this.render();
+    persistObject(STORAGE_KEYS.favorites, this.state.favorites);
+    persistObject(STORAGE_KEYS.recents, this.state.recents);
+    persistObject(STORAGE_KEYS.progress, this.state.progress);
+    this.views.render(this.state);
     this.showToast('Dados locais da conta ativa foram limpos.');
   }
 
-  applyProxy(url, proxy) {
-    return applyProxyFn(url, proxy);
-  }
-
-  buildApiUrl(account, action = '') {
-    return buildApiUrlFn(account, action);
-  }
-
-  async fetchJson(url, proxy = '') {
-    return fetchJsonFn(url, proxy);
-  }
-
-  buildMovieUrl(account, item) {
-    return buildMovieUrlFn(account, item);
-  }
-
-  buildLiveUrl(account, item, extension = 'm3u8') {
-    return buildLiveUrlFn(account, item, extension);
-  }
-
-  buildEpisodeUrl(account, episode) {
-    return buildEpisodeUrlFn(account, episode);
-  }
+  applyProxy(url, proxy) { return applyProxyFn(url, proxy); }
+  buildApiUrl(account, action = '') { return buildApiUrlFn(account, action); }
+  async fetchJson(url, proxy = '') { return fetchJsonFn(url, proxy); }
+  buildMovieUrl(account, item) { return buildMovieUrlFn(account, item); }
+  buildLiveUrl(account, item, extension = 'm3u8') { return buildLiveUrlFn(account, item, extension); }
+  buildEpisodeUrl(account, episode) { return buildEpisodeUrlFn(account, episode); }
 
   mapMovieItem(accountId, account, item, categoryMap) {
     const streamId = String(item.stream_id || item.id || item.num || '0');
@@ -934,10 +892,9 @@ class NexoraApp {
       id: forcedId || makeAccountId(inputAccount.server, inputAccount.username)
     };
 
-    // Forçar HTTPS em todos os endereços de servidor ao conectar
     baseAccount.server = normalizeServer(baseAccount.server);
 
-    const [profile, liveCategories, vodCategories, seriesCategories, liveStreams, vodStreams, seriesList] = await Promise.all([
+    const [profile, liveCategories, vodCategories, seriesCategories, liveStreams, vodStream, seriesList] = await Promise.all([
       this.fetchJson(this.buildApiUrl(baseAccount), baseAccount.proxy),
       this.fetchJson(this.buildApiUrl(baseAccount, 'get_live_categories'), baseAccount.proxy),
       this.fetchJson(this.buildApiUrl(baseAccount, 'get_vod_categories'), baseAccount.proxy),
@@ -968,11 +925,11 @@ class NexoraApp {
       lastSyncedAt: Date.now()
     };
 
-    const liveCategoryMap = Object.fromEntries(safeArray(liveCategories).map((item) => [String(item.category_id), item.category_name || 'Canais'])) ;
-    const vodCategoryMap = Object.fromEntries(safeArray(vodCategories).map((item) => [String(item.category_id), item.category_name || 'Filmes'])) ;
-    const seriesCategoryMap = Object.fromEntries(safeArray(seriesCategories).map((item) => [String(item.category_id), item.category_name || 'Séries'])) ;
+    const liveCategoryMap = Object.fromEntries(safeArray(liveCategories).map((item) => [String(item.category_id), item.category_name || 'Canais']));
+    const vodCategoryMap = Object.fromEntries(safeArray(vodCategories).map((item) => [String(item.category_id), item.category_name || 'Filmes']));
+    const seriesCategoryMap = Object.fromEntries(safeArray(seriesCategories).map((item) => [String(item.category_id), item.category_name || 'Séries']));
 
-    const movies = sortByAdded(safeArray(vodStreams).map((item) => this.mapMovieItem(account.id, account, item, vodCategoryMap)));
+    const movies = sortByAdded(safeArray(vodStream).map((item) => this.mapMovieItem(account.id, account, item, vodCategoryMap)));
     const series = sortByAdded(safeArray(seriesList).map((item) => this.mapSeriesItem(account.id, item, seriesCategoryMap)));
     const channels = sortByAdded(safeArray(liveStreams).map((item) => this.mapChannelItem(account.id, account, item, liveCategoryMap)));
 
@@ -995,473 +952,21 @@ class NexoraApp {
     return { account, library };
   }
 
-  getAllItems(library = this.state.currentLibrary) {
-    if (!library) {
-      return [];
-    }
-
-    return [...safeArray(library.movies), ...safeArray(library.series), ...safeArray(library.channels)];
-  }
-
   findItemById(itemId) {
-    const currentItems = this.getAllItems();
+    const currentItems = this.views.getAllItems(this.state.currentLibrary);
     const current = currentItems.find((item) => item.id === itemId);
 
-    if (current) {
-      return current;
-    }
+    if (current) { return current; }
 
     const recent = this.state.recents.find((item) => item.id === itemId);
-    if (recent) {
-      return recent;
-    }
+    if (recent) { return recent; }
 
     return this.state.progress[itemId] || null;
   }
 
-  applySearch(items = []) {
-    const term = this.state.search.trim().toLowerCase();
-
-    if (!term) {
-      return items;
-    }
-
-    return items.filter((item) => {
-      const haystack = `${item.title} ${item.categoryName || ''} ${item.plot || ''}`.toLowerCase();
-      return haystack.includes(term);
-    });
-  }
-
-  getFavoriteItems() {
-    const favorites = new Set(this.state.favorites[this.state.activeAccountId] || []);
-    return this.getAllItems().filter((item) => favorites.has(item.id));
-  }
-
-  getRecentItems() {
-    return this.state.recents
-      .filter((item) => item.accountId === this.state.activeAccountId)
-      .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-  }
-
-  getContinueWatchingItems() {
-    return Object.values(this.state.progress)
-      .filter((item) => item.accountId === this.state.activeAccountId && Number(item.currentTime || 0) > 5)
-      .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-  }
-
-  getViewLabel() {
-    return {
-      home: 'Início',
-      movies: 'Filmes',
-      series: 'Séries',
-      channels: 'Canais ao vivo',
-      favorites: 'Favoritos',
-      recents: 'Recentes'
-    }[this.state.view] || 'Início';
-  }
-
-  toggleSidebar(force) {
-    const shell = this.dom.pageShell;
-
-    if (!shell) {
-      return;
-    }
-
-    const nextState = typeof force === 'boolean' ? force : !shell.classList.contains('sidebar-open');
-    shell.classList.toggle('sidebar-open', nextState);
-  }
-
-  scrollContentTop() {
-    this.dom.contentShell?.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
-  }
-
-  getResumeCandidate() {
-    return this.getContinueWatchingItems()[0] || this.getRecentItems()[0] || null;
-  }
-
-  async handleQuickAction(action) {
-    if (!this.state.currentLibrary) {
-      this.showToast('Conecte uma conta para usar os atalhos rápidos.');
-      return;
-    }
-
-    if (action === 'resume') {
-      const item = this.getResumeCandidate();
-
-      if (!item) {
-        this.showToast('Nada em andamento para retomar agora.');
-        return;
-      }
-
-      this.playItem(item);
-      return;
-    }
-
-    if (action === 'live') {
-      const liveItem = safeArray(this.state.currentLibrary.channels)[0];
-
-      if (!liveItem) {
-        this.showToast('Nenhum canal ao vivo disponível nesta conta.');
-        return;
-      }
-
-      this.state.view = 'channels';
-      this.state.search = '';
-
-      if (this.dom.searchInput) {
-        this.dom.searchInput.value = '';
-      }
-
-      this.render();
-      this.scrollContentTop();
-      this.playItem(liveItem);
-    }
-  }
-
-  renderDashboardStrip() {
-    const library = this.state.currentLibrary;
-    const activeAccount = this.getAccountById(this.state.activeAccountId);
-    const moviesCount = safeArray(library?.movies).length;
-    const seriesCount = safeArray(library?.series).length;
-    const channelsCount = safeArray(library?.channels).length;
-    const favoritesCount = (this.state.favorites[this.state.activeAccountId] || []).length;
-    const continueCount = this.getContinueWatchingItems().length;
-    const recentsCount = this.getRecentItems().length;
-    const resumeItem = this.getResumeCandidate();
-    const liveItem = safeArray(library?.channels)[0] || null;
-    const totalAccounts = this.state.accounts.length;
-    const accountName = library?.accountName || 'Nenhuma conta conectada';
-    const syncText = library?.fetchedAt
-      ? new Date(library.fetchedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-      : 'aguardando login';
-    const statusLabel = activeAccount?.status || 'offline';
-    const expLabel = activeAccount?.expDate ? formatUnixDate(activeAccount.expDate) : 'não informado';
-
-    if (this.dom.viewHeadline) {
-      this.dom.viewHeadline.textContent = this.getViewLabel();
-    }
-
-    if (this.dom.activeAccountLabel) {
-      this.dom.activeAccountLabel.textContent = activeAccount ? `Conta ativa · ${accountName}` : 'Nenhuma conta conectada';
-    }
-
-    if (this.dom.accountsCounter) {
-      this.dom.accountsCounter.textContent = `${totalAccounts} ${totalAccounts === 1 ? 'perfil' : 'perfis'}`;
-    }
-
-    if (this.dom.refreshAllAccountsBtn) {
-      this.dom.refreshAllAccountsBtn.disabled = totalAccounts === 0;
-    }
-
-    if (this.dom.profilePill) {
-      this.dom.profilePill.textContent = '';
-    }
-
-    if (this.dom.sidebarOverviewCard) {
-      this.dom.sidebarOverviewCard.innerHTML = activeAccount ? `
-        <div class="sidebar-overview-head">
-          <div>
-            <p class="eyebrow">Biblioteca pronta</p>
-            <h3 class="sidebar-account-name">${escapeHtml(accountName)}</h3>
-            <p class="sidebar-muted-line">Atualizado em ${escapeHtml(syncText)}</p>
-          </div>
-          <span class="badge">${escapeHtml(statusLabel)}</span>
-        </div>
-        <div class="sidebar-chip-row">
-          <span class="badge">${moviesCount} filmes</span>
-          <span class="badge">${seriesCount} séries</span>
-          <span class="badge">${channelsCount} canais</span>
-        </div>
-      ` : '<div class="empty-state sidebar-empty">Conecte uma conta para liberar o catálogo.</div>';
-    }
-
-    if (this.dom.accountSummaryCard) {
-      this.dom.accountSummaryCard.innerHTML = activeAccount ? `
-        <div class="account-summary-grid">
-          <div><span>Status</span><strong>${escapeHtml(statusLabel)}</strong></div>
-          <div><span>Expira em</span><strong>${escapeHtml(expLabel)}</strong></div>
-          <div><span>Conexões</span><strong>${escapeHtml(String(activeAccount.activeConnections || 0))}/${escapeHtml(String(activeAccount.maxConnections || 0))}</strong></div>
-          <div><span>Timezone</span><strong>${escapeHtml(activeAccount.timezone || 'padrão')}</strong></div>
-        </div>
-        <div class="account-summary-actions">
-          <button class="ghost-btn summary-action-btn" data-quick-action="resume" ${resumeItem ? '' : 'disabled'}>Retomar</button>
-          <button class="ghost-btn summary-action-btn" data-quick-action="live" ${liveItem ? '' : 'disabled'}>Ao vivo</button>
-        </div>
-      ` : '<div class="empty-state sidebar-empty">Conecte uma conta para ver expiração, conexões e status.</div>';
-    }
-
-    if (this.dom.quickStatsGrid) {
-      const cards = [
-        {
-          label: 'Perfis',
-          value: totalAccounts,
-          hint: totalAccounts === 1 ? 'conectado' : 'conectados'
-        },
-        {
-          label: 'Favoritos',
-          value: favoritesCount,
-          hint: favoritesCount ? 'na conta ativa' : 'vazio'
-        },
-        {
-          label: 'Continuar',
-          value: continueCount,
-          hint: continueCount ? 'em andamento' : 'nada agora'
-        },
-        {
-          label: 'Recentes',
-          value: recentsCount,
-          hint: recentsCount ? 'abertos há pouco' : 'sem histórico'
-        }
-      ];
-
-      this.dom.quickStatsGrid.innerHTML = cards.map((card) => `
-        <article class="quick-stat-card glass-card">
-          <span>${escapeHtml(card.label)}</span>
-          <strong class="stat-value">${escapeHtml(String(card.value))}</strong>
-          <small>${escapeHtml(card.hint)}</small>
-        </article>
-      `).join('');
-    }
-  }
-
-  pickFeaturedItem() {
-    const library = this.state.currentLibrary;
-    if (!library) {
-      return null;
-    }
-
-    const continueItems = this.getContinueWatchingItems();
-    if (continueItems.length > 0) {
-      return continueItems[0];
-    }
-
-    const favoriteItems = this.getFavoriteItems();
-    if (favoriteItems.length > 0) {
-      return favoriteItems[0];
-    }
-
-    const itemFromLibrary = this.findItemById(library.featuredItemId);
-    return itemFromLibrary || this.getAllItems(library)[0] || null;
-  }
-
-  renderHero() {
-    const item = this.pickFeaturedItem();
-    const library = this.state.currentLibrary;
-
-    if (!item || !library) {
-      this.dom.heroSection.innerHTML = '<div class="hero-content"><h2 class="hero-title">Conecte sua conta Xtream Codes</h2><p class="hero-description">Adicione uma conta para carregar filmes, séries e canais.</p><div class="hero-actions" style="margin-top: 16px;"><button class="primary-btn" id="heroConnectBtn">Adicionar conta</button></div></div>';
-      document.getElementById('heroConnectBtn')?.addEventListener('click', () => this.openModal('connectModal'));
-      return;
-    }
-
-    const rating = item.rating ? `⭐ ${escapeHtml(item.rating)}` : escapeHtml(item.progressLabel || 'Streaming');
-    const year = item.year ? `· ${escapeHtml(item.year)}` : '';
-    this.dom.heroSection.style.setProperty('--hero-image', `url("${item.backdrop || item.poster || makePoster(item.title)}")`);
-    this.dom.heroSection.innerHTML = `
-      <div class="hero-layout simple-hero-layout">
-        <div class="hero-content">
-          <h2 class="hero-title">${escapeHtml(item.title)}</h2>
-          <p class="hero-description">${escapeHtml(item.plot || 'Sem descrição disponível.')}</p>
-          <div class="badges">
-            <span class="badge">${rating}${year}</span>
-            ${item.categoryName ? `<span class="badge">${escapeHtml(item.categoryName)}</span>` : ''}
-          </div>
-          <div class="hero-actions" style="margin-top: 16px;">
-            <button class="primary-btn" data-play-item="${escapeHtml(item.id)}">Assistir</button>
-            <button class="ghost-btn" data-open-item="${escapeHtml(item.id)}">Detalhes</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  createMediaCard(item) {
-    const isFavorite = (this.state.favorites[this.state.activeAccountId] || []).includes(item.id);
-    const progress = this.state.progress[item.id];
-    const progressPercent = progress?.duration ? Math.max(3, Math.min(100, (progress.currentTime / progress.duration) * 100)) : 0;
-    const label = item.type === 'channel' ? 'AO VIVO' : item.type === 'series' ? 'SÉRIE' : 'FILME';
-
-    return `
-      <article class="media-card" data-open-item="${escapeHtml(item.id)}">
-        <div class="media-thumb">
-          <img loading="lazy" src="${item.poster || makePoster(item.title)}" alt="${escapeHtml(item.title)}" />
-          <div class="media-scrim"></div>
-          <div class="card-topbar">
-            <span class="${item.type === 'channel' ? 'live-pill' : 'badge'}">${label}</span>
-            <button class="ghost-btn text-chip" data-favorite-item="${escapeHtml(item.id)}" aria-label="Favoritar">
-              ${isFavorite ? 'Salvo' : 'Salvar'}
-            </button>
-          </div>
-          <div class="card-bottombar">
-            <button class="play-chip" data-play-item="${escapeHtml(item.id)}" aria-label="Assistir ${escapeHtml(item.title)}">Abrir</button>
-          </div>
-        </div>
-        <div class="media-meta">
-          <h3 class="media-title">${escapeHtml(item.title)}</h3>
-          <p class="media-subtitle">${escapeHtml(item.categoryName || item.progressLabel || 'Catálogo')}</p>
-          ${progressPercent ? `<div class="progress-track"><span style="width:${progressPercent}%"></span></div>` : ''}
-        </div>
-      </article>
-    `;
-  }
-
-  createRow(title, items, options = {}) {
-    if (!items.length) {
-      return '';
-    }
-
-    const modeClass = options.grid ? 'grid-mode' : '';
-
-    return `
-      <section class="row-section">
-        <div class="row-header">
-          <div>
-            <p class="eyebrow">${escapeHtml(options.kicker || 'Catálogo')}</p>
-            <h2>${escapeHtml(title)}</h2>
-          </div>
-        </div>
-        <div class="media-row ${modeClass}">
-          ${items.map((item) => this.createMediaCard(item)).join('')}
-        </div>
-      </section>
-    `;
-  }
-
-  renderContinueSection() {
-    const items = this.getContinueWatchingItems();
-
-    if (!items.length) {
-      this.dom.continueSection.classList.add('hidden');
-      this.dom.continueRow.innerHTML = '';
-      return;
-    }
-
-    this.dom.continueSection.classList.remove('hidden');
-    this.dom.continueRow.innerHTML = items.slice(0, 12).map((item) => this.createMediaCard(item)).join('');
-  }
-
-  buildRowsForCurrentView() {
-    const library = this.state.currentLibrary;
-    if (!library) {
-      return [];
-    }
-
-    const movies = this.applySearch(safeArray(library.movies));
-    const series = this.applySearch(safeArray(library.series));
-    const channels = this.applySearch(safeArray(library.channels));
-    const favorites = this.applySearch(this.getFavoriteItems());
-    const recents = this.applySearch(this.getRecentItems());
-
-    if (this.state.view === 'movies') {
-      return [
-        this.createRow('Todos os filmes', movies, { kicker: 'Filmes', grid: true })
-      ];
-    }
-
-    if (this.state.view === 'series') {
-      return [
-        this.createRow('Todas as séries', series, { kicker: 'Séries', grid: true })
-      ];
-    }
-
-    if (this.state.view === 'channels') {
-      return [
-        this.createRow('Canais ao vivo', channels, { kicker: 'Ao vivo', grid: true })
-      ];
-    }
-
-    if (this.state.view === 'favorites') {
-      return [
-        this.createRow('Seus favoritos', favorites, { kicker: 'Favoritos', grid: true })
-      ];
-    }
-
-    if (this.state.view === 'recents') {
-      return [
-        this.createRow('Abertos recentemente', recents, { kicker: 'Recentes', grid: true })
-      ];
-    }
-
-    return [
-      this.createRow('Filmes em destaque', movies.slice(0, 18), { kicker: 'Curadoria' }),
-      this.createRow('Séries para maratonar', series.slice(0, 18), { kicker: 'Séries' }),
-      this.createRow('Canais ao vivo', channels.slice(0, 18), { kicker: 'Live' }),
-      this.createRow('Favoritos rápidos', favorites.slice(0, 12), { kicker: 'Sua lista' }),
-      this.createRow('Acessos recentes', recents.slice(0, 12), { kicker: 'Histórico' })
-    ];
-  }
-
-  renderAccounts() {
-    const accountsHtml = this.state.accounts.map((account) => {
-      const library = this.state.libraries[account.id];
-      const totalItems = library
-        ? safeArray(library.movies).length + safeArray(library.series).length + safeArray(library.channels).length
-        : 0;
-      const expLabel = account.expDate ? formatUnixDate(account.expDate) : 'sem data';
-      const statusLabel = account.status || 'offline';
-      const syncLabel = library?.fetchedAt
-        ? new Date(library.fetchedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        : 'sem sync';
-
-      return `
-        <div class="account-item ${this.state.activeAccountId === account.id ? 'active' : ''}">
-          <button class="account-main" data-switch-account="${escapeHtml(account.id)}">
-            <strong>${escapeHtml(account.name)}</strong>
-            <span>${escapeHtml(account.server)}</span>
-            <div class="account-meta-line">
-              <small>${escapeHtml(String(totalItems))} itens</small>
-              <small>${escapeHtml(syncLabel)}</small>
-            </div>
-            <div class="account-badges">
-              <span class="badge">${escapeHtml(statusLabel)}</span>
-              <span class="badge">exp ${escapeHtml(expLabel)}</span>
-            </div>
-          </button>
-          <div class="account-actions">
-            <button class="ghost-btn text-action-btn" data-refresh-account="${escapeHtml(account.id)}" title="Atualizar">Atualizar</button>
-            <button class="ghost-btn text-action-btn" data-remove-account="${escapeHtml(account.id)}" title="Remover">Remover</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    this.dom.accountsList.innerHTML = accountsHtml || '<div class="empty-state sidebar-empty">Nenhuma conta conectada ainda.</div>';
-  }
-
-  renderNavState() {
-    document.querySelectorAll('[data-view]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.view === this.state.view);
-    });
-  }
-
-  render() {
-    this.renderNavState();
-    this.renderDashboardStrip();
-    this.renderHero();
-    this.renderContinueSection();
-
-    const rows = this.buildRowsForCurrentView().filter(Boolean);
-    this.dom.rowsContainer.innerHTML = rows.length
-      ? rows.join('')
-      : '<div class="empty-state">Nenhum item encontrado para este filtro. Tente outra busca ou troque de conta.</div>';
-  }
-
-  createSnapshot(item) {
-    return {
-      ...item,
-      accountId: item.accountId || this.state.activeAccountId,
-      updatedAt: Date.now()
-    };
-  }
-
   toggleFavorite(itemId) {
     const item = this.findItemById(itemId);
-    if (!item) {
-      return;
-    }
+    if (!item) { return; }
 
     const accountKey = item.accountId || this.state.activeAccountId;
     const current = new Set(this.state.favorites[accountKey] || []);
@@ -1475,8 +980,8 @@ class NexoraApp {
     }
 
     this.state.favorites[accountKey] = [...current];
-    this.persistObject(STORAGE_KEYS.favorites, this.state.favorites);
-    this.render();
+    persistObject(STORAGE_KEYS.favorites, this.state.favorites);
+    this.views.render(this.state);
 
     if (this.dom.detailsModal.dataset.itemId === item.id) {
       this.updateDetailsFavoriteState(item.id);
@@ -1491,43 +996,21 @@ class NexoraApp {
 
   async openDetails(itemId) {
     const item = this.findItemById(itemId);
-    if (!item) {
-      return;
-    }
+    if (!item) { return; }
 
-    this.dom.detailsModal.dataset.itemId = item.id;
-    this.dom.detailsPoster.src = item.poster || makePoster(item.title);
-    this.dom.detailsType.textContent = item.progressLabel || item.type;
-    this.dom.detailsTitle.textContent = item.title;
-    this.dom.detailsMeta.textContent = [item.categoryName, item.year, item.rating ? `⭐ ${item.rating}` : ''].filter(Boolean).join(' · ');
-    this.dom.detailsDescription.textContent = item.plot || 'Sem descrição disponível para este conteúdo.';
-    this.dom.detailsBadges.innerHTML = [
-      `<span class="badge">${escapeHtml(item.progressLabel || item.type)}</span>`,
-      item.categoryName ? `<span class="badge">${escapeHtml(item.categoryName)}</span>` : '',
-      item.year ? `<span class="badge">${escapeHtml(item.year)}</span>` : ''
-    ].join('');
-
-    this.updateDetailsFavoriteState(item.id);
+    this.views.renderDetailsModal(item, this.state, async (seriesItem) => {
+      await this.loadSeriesDetails(seriesItem);
+    });
     this.openModal('detailsModal');
-
-    if (item.type === 'series') {
-      this.dom.detailsEpisodesWrap.classList.remove('hidden');
-      this.dom.detailsEpisodes.innerHTML = '<div class="empty-state">Carregando episódios...</div>';
-      await this.loadSeriesDetails(item);
-    } else {
-      this.dom.detailsEpisodesWrap.classList.add('hidden');
-      this.dom.detailsEpisodes.innerHTML = '';
-    }
   }
 
   async loadSeriesDetails(item) {
     if (safeArray(item.episodes).length > 0 && item.episodes[0]?.url) {
-      this.renderEpisodes(item);
+      this.views.renderEpisodes(item);
       return;
     }
 
     const account = this.getAccountById(item.accountId);
-
     if (!account) {
       this.dom.detailsEpisodes.innerHTML = '<div class="empty-state">Conta não encontrada para carregar os episódios.</div>';
       return;
@@ -1563,32 +1046,16 @@ class NexoraApp {
       item.backdrop = response.info?.cover || item.backdrop;
       item.poster = response.info?.cover || item.poster;
       item.episodes = episodes;
-      this.persistLibraries();
-      this.renderEpisodes(item);
+      persistLibraries(this.state, STORAGE_KEYS);
+      this.views.renderEpisodes(item);
     } catch (error) {
       this.dom.detailsEpisodes.innerHTML = `<div class="empty-state">${escapeHtml(error.message || 'Não foi possível carregar os episódios.')}</div>`;
     }
   }
 
-  renderEpisodes(item) {
-    if (!safeArray(item.episodes).length) {
-      this.dom.detailsEpisodes.innerHTML = '<div class="empty-state">Esta série não retornou episódios pela API.</div>';
-      return;
-    }
-
-    this.dom.detailsEpisodes.innerHTML = item.episodes.map((episode) => `
-      <button class="episode-item" data-parent-item="${escapeHtml(item.id)}" data-play-episode="${escapeHtml(episode.id)}">
-        <strong>${escapeHtml(episode.title)}</strong>
-        <span>Temporada ${episode.season || 1} · ${formatRuntime(episode.duration)}</span>
-      </button>
-    `).join('');
-  }
-
   async handleEpisodePlay(parentItemId, episodeId) {
     const item = this.findItemById(parentItemId);
-    if (!item) {
-      return;
-    }
+    if (!item) { return; }
 
     if (!safeArray(item.episodes).length) {
       await this.loadSeriesDetails(item);
@@ -1600,24 +1067,26 @@ class NexoraApp {
       return;
     }
 
-    this.playItem({
-      ...item,
-      id: `${item.id}::${episode.id}`,
-      type: 'episode',
-      title: `${item.title} · ${episode.title}`,
-      poster: episode.poster || item.poster,
-      plot: episode.plot || item.plot,
-      url: episode.url,
-      duration: episode.duration,
-      progressLabel: 'Episódio'
-    });
+    this.player.playItem(
+      {
+        ...item,
+        id: `${item.id}::${episode.id}`,
+        type: 'episode',
+        title: `${item.title} · ${episode.title}`,
+        poster: episode.poster || item.poster,
+        plot: episode.plot || item.plot,
+        url: episode.url,
+        duration: episode.duration,
+        progressLabel: 'Episódio'
+      },
+      () => this.clearFinishedProgress(),
+      (progress) => persistObject(STORAGE_KEYS.progress, progress)
+    );
   }
 
   async handlePlayItem(itemId) {
     const item = this.findItemById(itemId);
-    if (!item) {
-      return;
-    }
+    if (!item) { return; }
 
     if (item.type === 'series') {
       await this.loadSeriesDetails(item);
@@ -1639,295 +1108,98 @@ class NexoraApp {
     this.closeModal('detailsModal');
     this.openModal('playerModal');
 
-    this.dom.playerTitle.textContent = item.title;
-    this.dom.playerMeta.textContent = [item.categoryName, item.year, item.progressLabel].filter(Boolean).join(' · ');
-
-    const player = this.dom.videoPlayer;
-    player.pause();
-    player.controls = false;
-    player.playbackRate = Number(this.dom.playerSpeedSelect?.value || 1);
-
-    if (this.state.hls) {
-      this.state.hls.destroy();
-      this.state.hls = null;
-    }
-
-    player.removeAttribute('src');
-    player.load();
-
-    const progress = this.state.progress[item.id];
-    const shouldResume = item.type !== 'channel' && item.type !== 'live';
-
-    if (window.Hls && window.Hls.isSupported() && /\.m3u8($|\?)/i.test(item.url || '')) {
-      const hls = new window.Hls();
-      this.state.hls = hls;
-      hls.loadSource(item.url);
-      hls.attachMedia(player);
-      hls.on(window.Hls.Events.ERROR, (_, data) => {
-        if (data?.fatal && item.fallbackUrl) {
-          player.src = item.fallbackUrl;
-          player.play().catch(() => undefined);
-        }
-      });
-    } else {
-      player.src = item.url;
-    }
-
-    player.onloadedmetadata = () => {
-      if (shouldResume && progress?.currentTime && progress.currentTime < (player.duration || Number.MAX_SAFE_INTEGER) - 8) {
-        player.currentTime = progress.currentTime;
-      }
-      this.syncPlayerChrome();
-    };
-
-    player.play().catch(() => {
-      this.showToast('A reprodução foi bloqueada até você interagir com o player.');
-    });
+    this.player.playItem(
+      item,
+      () => this.clearFinishedProgress(),
+      (progress) => persistObject(STORAGE_KEYS.progress, progress)
+    );
 
     this.markRecent(item);
-    this.state.currentPlayback = item;
-    this.dom.playerSurface?.classList.add('show-controls');
-    this.syncPlayerChrome();
-    this.schedulePlayerControlsHide(2600);
   }
 
   markRecent(item) {
-    const snapshot = this.createSnapshot(item);
-    this.state.recents = [snapshot, ...this.state.recents.filter((entry) => entry.id !== item.id)].slice(0, 30);
-    this.persistObject(STORAGE_KEYS.recents, this.state.recents);
-    this.render();
-  }
-
-  togglePlayback() {
-    const player = this.dom.videoPlayer;
-
-    if (!player.currentSrc && !player.src) {
-      return;
-    }
-
-    if (player.paused) {
-      player.play().catch(() => {
-        this.showToast('Clique novamente para liberar a reprodução.');
-      });
-    } else {
-      player.pause();
-    }
-
-    this.pingPlayerControls();
-  }
-
-  seekBy(seconds) {
-    const player = this.dom.videoPlayer;
-
-    if (this.state.currentPlayback?.type === 'channel') {
-      return;
-    }
-
-    if (!Number.isFinite(player.duration) || !player.duration) {
-      return;
-    }
-
-    player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + seconds));
-    this.syncPlayerChrome();
-  }
-
-  toggleMute() {
-    const player = this.dom.videoPlayer;
-    player.muted = !player.muted;
-
-    if (!player.muted && player.volume === 0) {
-      player.volume = 0.85;
-    }
-
-    this.syncPlayerChrome();
-  }
-
-  async togglePictureInPicture() {
-    const player = this.dom.videoPlayer;
-
-    if (!document.pictureInPictureEnabled || !player) {
-      this.showToast('Picture-in-Picture não está disponível neste navegador.');
-      return;
-    }
-
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else {
-        await player.requestPictureInPicture();
-      }
-    } catch {
-      this.showToast('Não foi possível alternar o modo Picture-in-Picture.');
-    }
-  }
-
-  async toggleFullscreen() {
-    const container = this.dom.playerSurface || this.dom.videoPlayer;
-
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await container.requestFullscreen();
-      }
-      this.pingPlayerControls();
-    } catch {
-      this.showToast('Não foi possível alternar a tela cheia.');
-    }
-  }
-
-  pingPlayerControls() {
-    this.dom.playerSurface?.classList.add('show-controls');
-    this.schedulePlayerControlsHide();
-  }
-
-  schedulePlayerControlsHide(delay = 2200) {
-    window.clearTimeout(this.playerControlsTimer);
-
-    if (this.dom.videoPlayer.paused) {
-      this.dom.playerSurface?.classList.add('show-controls');
-      return;
-    }
-
-    this.playerControlsTimer = window.setTimeout(() => {
-      this.dom.playerSurface?.classList.remove('show-controls');
-    }, delay);
-  }
-
-  syncPlayerChrome() {
-    const player = this.dom.videoPlayer;
-    const currentItem = this.state.currentPlayback;
-    const isLive = currentItem?.type === 'channel';
-    const duration = !isLive && Number.isFinite(player.duration) ? player.duration : 0;
-    const current = !isLive && Number.isFinite(player.currentTime) ? player.currentTime : 0;
-    const percent = isLive ? 100 : (duration > 0 ? (current / duration) * 100 : 0);
-
-    if (this.dom.playerSeek) {
-      this.dom.playerSeek.value = String(percent || 0);
-      this.dom.playerSeek.disabled = isLive || duration <= 0;
-      this.dom.playerSeek.classList.toggle('is-live-track', isLive);
-    }
-
-    if (this.dom.playerCurrentTime) {
-      this.dom.playerCurrentTime.textContent = isLive ? 'Canal' : formatClock(current);
-    }
-
-    if (this.dom.playerDuration) {
-      this.dom.playerDuration.textContent = isLive ? 'Agora' : (duration > 0 ? formatClock(duration) : '00:00');
-    }
-
-    if (this.dom.playerLiveBadge) {
-      this.dom.playerLiveBadge.classList.toggle('hidden', !isLive);
-    }
-
-    this.dom.playerSurface?.classList.toggle('is-live', isLive);
-
-    if (this.dom.playerPlayPauseBtn) {
-      const isPaused = player.paused;
-      this.dom.playerPlayPauseBtn.dataset.state = isPaused ? 'paused' : 'playing';
-      this.dom.playerPlayPauseBtn.textContent = isPaused ? 'Play' : 'Pausar';
-    }
-
-    if (this.dom.playerMuteBtn) {
-      const isMuted = player.muted || player.volume === 0;
-      this.dom.playerMuteBtn.dataset.state = isMuted ? 'muted' : 'on';
-      this.dom.playerMuteBtn.textContent = isMuted ? 'Mudo' : 'Som';
-    }
-
-    if (this.dom.playerVolume) {
-      const currentVolume = player.muted ? 0 : Number(player.volume || 0);
-      this.dom.playerVolume.value = String(currentVolume);
-    }
-
-    if (this.dom.playerBackBtn) {
-      this.dom.playerBackBtn.disabled = isLive;
-    }
-
-    if (this.dom.playerForwardBtn) {
-      this.dom.playerForwardBtn.disabled = isLive;
-    }
-
-    if (this.dom.playerVolume) {
-      this.dom.playerVolume.value = String(player.muted ? 0 : player.volume);
-    }
-
-    this.dom.playerSurface?.classList.toggle('is-live', isLive);
-    this.dom.playerSurface?.classList.toggle('is-playing', !player.paused);
-
-    if (player.paused) {
-      this.dom.playerSurface?.classList.add('show-controls');
-    }
-  }
-
-  handlePlaybackProgress() {
-    const current = this.state.currentPlayback;
-    const player = this.dom.videoPlayer;
-    this.syncPlayerChrome();
-
-    if (!current || current.type === 'channel') {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - this.state.lastProgressSave < 1500) {
-      return;
-    }
-
-    if (!Number.isFinite(player.currentTime) || player.currentTime < 1) {
-      return;
-    }
-
-    this.state.lastProgressSave = now;
-    this.state.progress[current.id] = {
-      ...this.createSnapshot(current),
-      currentTime: player.currentTime,
-      duration: Number.isFinite(player.duration) ? player.duration : current.duration || 0
+    const snapshot = {
+      ...item,
+      accountId: item.accountId || this.state.activeAccountId,
+      updatedAt: Date.now()
     };
-
-    this.persistObject(STORAGE_KEYS.progress, this.state.progress);
+    this.state.recents = [snapshot, ...this.state.recents.filter((entry) => entry.id !== item.id)].slice(0, 30);
+    persistObject(STORAGE_KEYS.recents, this.state.recents);
+    this.views.render(this.state);
   }
 
   clearFinishedProgress() {
     const current = this.state.currentPlayback;
+    if (!current) { return; }
 
-    if (!current) {
+    delete this.state.progress[current.id];
+    persistObject(STORAGE_KEYS.progress, this.state.progress);
+    this.views.render(this.state);
+  }
+
+  toggleSidebar(force) {
+    const sidebar = document.querySelector('.sidebar');
+    const shell = document.querySelector('.page-shell');
+    if (!sidebar) { return; }
+
+    const nextState = typeof force === 'boolean' ? force : !sidebar.classList.contains('hidden');
+    sidebar.classList.toggle('hidden', !nextState);
+    shell?.classList.toggle('sidebar-hidden', !nextState);
+    
+    this.state.sidebarOpen = nextState;
+    persistValue(STORAGE_KEYS.sidebarOpen, String(nextState));
+  }
+
+  scrollContentTop() {
+    this.dom.contentShell?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  showLoader(show = true) {
+    if (!this.dom.loaderOverlay) { return; }
+    this.dom.loaderOverlay.classList.toggle('active', show);
+  }
+
+  async handleQuickAction(action) {
+    if (!this.state.currentLibrary) {
+      this.showToast('Conecte uma conta para usar os atalhos rápidos.');
       return;
     }
 
-    delete this.state.progress[current.id];
-    this.persistObject(STORAGE_KEYS.progress, this.state.progress);
-    this.render();
-  }
-
-  closePlayer() {
-    this.closeModal('playerModal');
-    const player = this.dom.videoPlayer;
-    player.pause();
-
-    if (this.state.hls) {
-      this.state.hls.destroy();
-      this.state.hls = null;
+    if (action === 'resume') {
+      const item = this.views.getResumeCandidate(this.state.progress, this.state.recents, this.state.activeAccountId);
+      if (!item) {
+        this.showToast('Nada em andamento para retomar agora.');
+        return;
+      }
+      this.playItem(item);
+      return;
     }
 
-    player.removeAttribute('src');
-    player.load();
-    player.currentTime = 0;
-    player.playbackRate = 1;
-    if (this.dom.playerSpeedSelect) {
-      this.dom.playerSpeedSelect.value = '1';
+    if (action === 'live') {
+      const liveItem = safeArray(this.state.currentLibrary.channels)[0];
+      if (!liveItem) {
+        this.showToast('Nenhum canal ao vivo disponível nesta conta.');
+        return;
+      }
+
+      this.state.view = 'channels';
+      this.state.search = '';
+
+      if (this.dom.searchInput) { this.dom.searchInput.value = ''; }
+
+      this.views.render(this.state);
+      this.scrollContentTop();
+      this.playItem(liveItem);
     }
-    this.state.currentPlayback = null;
-    window.clearTimeout(this.playerControlsTimer);
-    this.dom.playerSurface?.classList.add('show-controls');
-    this.syncPlayerChrome();
   }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
   const app = new NexoraApp();
+
   document.getElementById('playerModal')?.addEventListener('click', (event) => {
     if (event.target.id === 'playerModal') {
-      app.closePlayer();
+      app.player.closePlayer();
     }
   });
 

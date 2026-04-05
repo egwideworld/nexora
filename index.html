@@ -4,13 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nexora</title>
-    <meta
-      name="description"
-      content="Nexora é uma plataforma IPTV estática, moderna e client-side para GitHub Pages, com suporte a Xtream Codes, favoritos, recentes e progresso salvo localmente."
-    />
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="assets/css/ambient.css" />
+    <meta name="description" content="Nexora é uma plataforma IPTV estática, moderna e client-side para GitHub Pages, com suporte a Xtream Codes, favoritos, recentes e progresso salvo localmente." />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <script>
+      window.onunload = window.onbeforeunload = function() { void 0; };
+    </script>
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/layout.css" />
     <link rel="stylesheet" href="assets/css/modals.css" />
+    <link rel="stylesheet" href="assets/css/player.css" />
+    <link rel="stylesheet" href="assets/css/content.css" />
+    <link rel="stylesheet" href="assets/css/ambient.css" />
+    <link rel="stylesheet" href="assets/css/main.css" />
     <script defer src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script>
       if (window.location.protocol === 'file:' && window.location.search) {
@@ -30,13 +38,12 @@
 
         history.replaceState(null, '', window.location.pathname);
       }
-
-      const script = document.createElement('script');
-      script.src = 'app.js';
-      script.type = 'module';
-      script.defer = true;
-      document.head.appendChild(script);
     </script>
+    <script>
+      // Disable bfcache
+      window.onunload = window.onbeforeunload = function() { void 0; };
+    </script>
+    <script src="app.js?v=20240406" type="module"></script>
   </head>
   <body>
     <div class="noise-layer"></div>
@@ -53,55 +60,88 @@
             <div class="brand-mark">N</div>
             <div>
               <h1>Nexora</h1>
-              <p>Acesse seu catálogo</p>
+              <p>Sua biblioteca IPTV</p>
             </div>
           </div>
 
-          <p class="eyebrow">Login obrigatório</p>
-          <h2 class="auth-title">Conecte sua conta Xtream Codes</h2>
+          <p class="eyebrow">Bem-vindo</p>
+          <h2 class="auth-title">Acesse seu catálogo</h2>
           <p class="auth-description">
-            Informe servidor, usuário e senha para acessar seu catálogo.
+            Assista filmes, séries e canais ao vivo direto no navegador. Suas contas Xtream Codes em um só lugar.
           </p>
+          
+          <div class="auth-features">
+            <div class="auth-feature">
+              <span class="auth-feature-icon">🎬</span>
+              <div>
+                <strong>Filmes e Séries</strong>
+                <p>Catálogo completo sob demanda</p>
+              </div>
+            </div>
+            <div class="auth-feature">
+              <span class="auth-feature-icon">📺</span>
+              <div>
+                <strong>Canais ao Vivo</strong>
+                <p>Transmissões em tempo real</p>
+              </div>
+            </div>
+            <div class="auth-feature">
+              <span class="auth-feature-icon">💾</span>
+              <div>
+                <strong>Seus Dados</strong>
+                <p>Favoritos salvos localmente</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="auth-panel auth-form-panel">
-          <p class="eyebrow">Entrar no Nexora</p>
-          <h2>Adicionar primeira conta</h2>
-          <p class="muted">
-            Use a URL do painel Xtream Codes e, se necessário, informe um proxy CORS.
-          </p>
+          <div id="accountSelector" class="account-selector hidden">
+            <p class="eyebrow">Selecione uma conta</p>
+            <h2>Quem está assistindo?</h2>
+            <div id="accountSelectorGrid" class="account-selector-grid"></div>
+            <button id="addNewAccountBtn" class="ghost-btn wide" style="margin-top: 16px;">Adicionar nova conta</button>
+          </div>
 
-          <form id="authForm" class="form-grid auth-form">
-            <label>
-              <span>Nome de exibição</span>
-              <input name="name" type="text" placeholder="Minha conta principal" />
-            </label>
+          <div id="authFormContainer">
+            <p class="eyebrow">Entrar no Nexora</p>
+            <h2>Adicionar conta</h2>
+            <p class="muted">
+              Use a URL do painel Xtream Codes e, se necessário, informe um proxy CORS.
+            </p>
 
-            <label>
-              <span>URL do servidor</span>
-              <input name="server" type="text" placeholder="https://seu-servidor:8080" required />
-            </label>
+            <form id="authForm" class="form-grid auth-form">
+              <label>
+                <span>Nome de exibição</span>
+                <input name="name" type="text" placeholder="Minha conta principal" />
+              </label>
 
-            <label>
-              <span>Usuário</span>
-              <input name="username" type="text" placeholder="usuario_xtream" required />
-            </label>
+              <label>
+                <span>URL do servidor</span>
+                <input name="server" type="text" placeholder="https://seu-servidor:8080" required />
+              </label>
 
-            <label>
-              <span>Senha</span>
-              <input name="password" type="password" placeholder="••••••••" required />
-            </label>
+              <label>
+                <span>Usuário</span>
+                <input name="username" type="text" placeholder="usuario_xtream" required />
+              </label>
 
-            <label class="full-width">
-              <span>Proxy CORS (opcional)</span>
-              <input name="proxy" type="text" placeholder="https://meu-proxy.com/?url={url}" />
-              <small>Use <code>{url}</code> se o proxy exigir a URL da API codificada.</small>
-            </label>
+              <label>
+                <span>Senha</span>
+                <input name="password" type="password" placeholder="••••••••" required />
+              </label>
 
-            <div class="form-actions full-width">
-              <button type="submit" class="primary-btn wide">Entrar e sincronizar</button>
-            </div>
-          </form>
+              <label class="full-width">
+                <span>Proxy CORS (opcional)</span>
+                <input name="proxy" type="text" placeholder="https://meu-proxy.com/?url={url}" />
+                <small>Use <code>{url}</code> se o proxy exigir a URL da API codificada.</small>
+              </label>
+
+              <div class="form-actions full-width">
+                <button type="submit" class="primary-btn wide">Entrar e sincronizar</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </section>
@@ -113,52 +153,54 @@
         <div class="sidebar-top">
           <div class="brand-block">
             <div class="brand-mark">N</div>
-            <div>
-              <h1>Nexora</h1>
-              <p>Sua biblioteca</p>
-            </div>
+            <h1>Nexora</h1>
           </div>
-
-          <div class="sidebar-toolbar">
-            <span id="activeAccountLabel" class="sidebar-active-label">Nenhuma conta conectada</span>
-            <button id="closeSidebarBtn" class="ghost-btn mobile-close" type="button" aria-label="Fechar menu">Fechar</button>
-          </div>
+          <button id="closeSidebarBtn" class="sidebar-close-btn" type="button" aria-label="Fechar menu">
+            <span class="close-icon">×</span>
+          </button>
         </div>
 
-        <div id="sidebarOverviewCard" class="sidebar-section sidebar-overview-card"></div>
+        <div id="sidebarOverviewCard" class="sidebar-card sidebar-account-card">
+          <div class="sidebar-card-header">
+            <span class="sidebar-card-title">Conta ativa</span>
+            <span id="activeAccountLabel" class="sidebar-active-label">Nenhuma conta</span>
+          </div>
+          <div class="sidebar-account-details"></div>
+        </div>
 
-        <section class="sidebar-section sidebar-status-card status-bar">
-          <div id="statusPill" class="status-pill ready">Pronto</div>
-          <p id="statusText">
-            Conecte sua conta Xtream Codes para carregar o catálogo real.
-          </p>
+        <section class="sidebar-card sidebar-status-card">
+          <div class="sidebar-card-header">
+            <span class="sidebar-card-title">Status</span>
+            <div id="statusPill" class="status-pill ready">Pronto</div>
+          </div>
+          <p id="statusText">Conecte sua conta Xtream Codes para carregar o catálogo.</p>
         </section>
 
-        <div class="sidebar-section">
-          <div class="section-heading">
-            <h2>Resumo</h2>
+        <div class="sidebar-card">
+          <div class="sidebar-card-header">
+            <span class="sidebar-card-title">Estatísticas</span>
           </div>
-          <div id="quickStatsGrid" class="quick-stats-grid sidebar-stats-grid"></div>
+          <div id="quickStatsGrid" class="quick-stats-grid"></div>
         </div>
 
-        <div class="sidebar-section action-stack">
-          <button id="openConnectBtn" class="primary-btn wide">Nova conta Xtream Codes</button>
-          <div class="utility-actions">
+        <div class="sidebar-card sidebar-actions-card">
+          <button id="openConnectBtn" class="primary-btn wide">
+            <span class="btn-icon">+</span> Adicionar conta
+          </button>
+          <div class="sidebar-actions-row">
             <button id="importAccountsBtn" class="ghost-btn">Importar</button>
             <button id="exportAccountsBtn" class="ghost-btn">Exportar</button>
           </div>
-          <button id="clearProgressBtn" class="ghost-btn wide">Limpar progresso local</button>
+          <button id="clearProgressBtn" class="ghost-btn wide">Limpar progresso</button>
           <input id="importAccountsInput" class="hidden" type="file" accept="application/json" />
         </div>
 
-        <div class="sidebar-section">
-          <div class="section-heading">
-            <h2>Contas</h2>
-            <span id="accountsCounter">1 perfil</span>
+        <div class="sidebar-card sidebar-accounts-card">
+          <div class="sidebar-card-header">
+            <span class="sidebar-card-title">Perfis conectados</span>
+            <span id="accountsCounter" class="sidebar-counter">1</span>
           </div>
-          <div class="sidebar-inline-actions">
-            <button id="refreshAllAccountsBtn" class="ghost-btn wide">Atualizar todas</button>
-          </div>
+          <button id="refreshAllAccountsBtn" class="ghost-btn wide">Atualizar todas</button>
           <div id="accountsList" class="accounts-list"></div>
         </div>
       </aside>
@@ -166,7 +208,9 @@
       <div class="content-shell">
         <header class="topbar glass-card">
           <div class="topbar-intro">
-            <button id="mobileMenuBtn" class="ghost-btn mobile-menu-btn" aria-label="Abrir menu">Menu</button>
+            <button id="mobileMenuBtn" class="ghost-btn sidebar-menu-btn" aria-label="Abrir menu">
+              <span class="menu-icon">☰</span>
+            </button>
             <h2 id="viewHeadline" class="view-headline">Início</h2>
           </div>
 
@@ -181,11 +225,11 @@
             </nav>
 
             <label class="search-box" aria-label="Buscar conteúdo">
-              <span>Buscar</span>
+              <span>🔍</span>
               <input
                 id="searchInput"
                 type="search"
-                placeholder="Buscar filmes, séries ou canais"
+                placeholder="Buscar..."
                 autocomplete="off"
               />
             </label>
@@ -268,32 +312,28 @@
 
     <div id="detailsModal" class="modal hidden" aria-hidden="true">
       <div class="modal-card details-card">
-        <button class="ghost-btn modal-close" data-close-modal="detailsModal" aria-label="Fechar">
-          Fechar
-        </button>
+        <button class="modal-close" data-close-modal="detailsModal" aria-label="Fechar"></button>
 
         <div class="details-layout">
           <img id="detailsPoster" class="details-poster" src="" alt="Poster" />
 
           <div class="details-content">
-            <p id="detailsType" class="eyebrow">Detalhes</p>
-            <h2 id="detailsTitle">Selecione um item</h2>
-            <p id="detailsMeta" class="muted"></p>
-            <p id="detailsDescription" class="details-description"></p>
+            <div class="details-info">
+              <p id="detailsType" class="eyebrow">Detalhes</p>
+              <h2 id="detailsTitle">Selecione um item</h2>
+              <p id="detailsMeta" class="muted"></p>
+              <p id="detailsDescription" class="details-description"></p>
 
-            <div id="detailsBadges" class="badges"></div>
+              <div id="detailsBadges" class="badges"></div>
 
-            <div class="details-actions">
-              <button id="detailsPlayBtn" class="primary-btn">Assistir</button>
-              <button id="detailsFavoriteBtn" class="ghost-btn">Favoritar</button>
+              <div class="details-actions">
+                <button id="detailsPlayBtn" class="primary-btn">Assistir</button>
+                <button id="detailsFavoriteBtn" class="ghost-btn">Favoritar</button>
+              </div>
             </div>
 
-            <div id="detailsEpisodesWrap" class="episodes-wrap hidden">
-              <div class="section-heading">
-                <h3>Episódios</h3>
-                <span>sob demanda</span>
-              </div>
-              <div id="detailsEpisodes" class="episodes-grid"></div>
+            <div id="detailsEpisodesWrap" class="details-episodes-container hidden">
+              <div id="detailsEpisodes" class="episodes-wrap"></div>
             </div>
           </div>
         </div>
@@ -302,9 +342,7 @@
 
     <div id="playerModal" class="modal hidden" aria-hidden="true">
       <div class="modal-card player-card">
-        <button class="ghost-btn modal-close" data-close-modal="playerModal" aria-label="Fechar">
-          Fechar
-        </button>
+        <button class="modal-close" data-close-modal="playerModal" aria-label="Fechar"></button>
 
         <div class="player-header">
           <div>
@@ -328,14 +366,14 @@
 
             <div class="player-controls-row">
               <div class="player-control-group player-control-group-main">
-                <button id="playerBackBtn" class="ghost-btn player-action-btn" aria-label="Voltar 10 segundos">-10s</button>
-                <button id="playerPlayPauseBtn" class="ghost-btn player-action-btn" aria-label="Play/Pause">Play</button>
-                <button id="playerForwardBtn" class="ghost-btn player-action-btn" aria-label="Avançar 10 segundos">+10s</button>
+                <button id="playerBackBtn" class="ghost-btn player-action-btn" aria-label="Voltar 10 segundos"></button>
+                <button id="playerPlayPauseBtn" class="ghost-btn player-action-btn" aria-label="Play/Pause"></button>
+                <button id="playerForwardBtn" class="ghost-btn player-action-btn" aria-label="Avançar 10 segundos"></button>
               </div>
 
               <div class="player-control-group player-control-group-right">
                 <div class="player-volume-wrap">
-                  <button id="playerMuteBtn" class="ghost-btn player-action-btn" aria-label="Mutar">Som</button>
+                  <button id="playerMuteBtn" class="ghost-btn player-action-btn" aria-label="Mutar"></button>
                   <input id="playerVolume" class="player-volume" type="range" min="0" max="1" step="0.05" value="0.85" />
                 </div>
                 <select id="playerSpeedSelect" class="player-speed-select" aria-label="Velocidade">
@@ -345,8 +383,8 @@
                   <option value="1.5">1.5x</option>
                   <option value="2">2x</option>
                 </select>
-                <button id="playerPipBtn" class="ghost-btn player-action-btn" aria-label="Mini tela">Mini tela</button>
-                <button id="playerFullscreenBtn" class="ghost-btn player-action-btn" aria-label="Tela cheia">Tela cheia</button>
+                <button id="playerPipBtn" class="ghost-btn player-action-btn" aria-label="Mini tela"></button>
+                <button id="playerFullscreenBtn" class="ghost-btn player-action-btn" aria-label="Tela cheia"></button>
               </div>
             </div>
           </div>

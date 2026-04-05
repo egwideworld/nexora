@@ -70,8 +70,10 @@ code {
 .page-shell {
   position: relative;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
+  padding: 2px 2px 2px 2px !important;
+  margin: 0 !important;
 }
 
 .sidebar {
@@ -84,13 +86,13 @@ code {
 .brand-block {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 .brand-block h1 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1rem;
 }
 
 .brand-block p {
@@ -144,15 +146,15 @@ code {
 }
 
 .content-shell {
-  padding: 18px 22px 28px;
+  padding: 0 2px 4px !important;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 0 !important;
 }
 
 .nav-group {
@@ -242,7 +244,7 @@ code {
 }
 
 .main-content {
-  margin-top: 18px;
+  margin-top: 0 !important;
 }
 
 .hero-card {
@@ -320,24 +322,46 @@ code {
 
 .row-header {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .row-header h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 0.95rem;
 }
 
 .media-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(180px, 220px);
-  gap: 14px;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  overflow-y: hidden;
+  padding: 4px 0;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+}
+
+.media-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.media-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.media-row::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 3px;
+}
+
+.media-row .media-card {
+  flex: 0 0 auto;
+  width: 160px;
+  min-width: 160px;
 }
 
 .media-row.grid-mode {
@@ -679,7 +703,7 @@ code {
 
 @media (max-width: 760px) {
   .content-shell {
-    padding: 14px;
+    padding: 0 2px 60px !important;
   }
 
   .topbar {
@@ -739,10 +763,10 @@ body {
 
 .page-shell {
   max-width: 1720px;
-  margin: 0 auto;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 20px;
-  padding: 18px;
+  margin: 0 auto !important;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 2px !important;
+  padding: 2px !important;
 }
 
 .sidebar {
@@ -759,7 +783,17 @@ body {
 }
 
 .sidebar-top {
-  margin-bottom: 18px;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 0 6px 0;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar .brand-block {
+  margin-bottom: 0;
 }
 
 .profile-card {
@@ -820,16 +854,17 @@ body {
 
 .topbar {
   position: sticky;
-  top: 18px;
+  top: 0;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 22px;
-  background: rgba(14, 14, 14, 0.7);
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
 }
 
@@ -1119,11 +1154,12 @@ body {
 @media (max-width: 1040px) {
   .page-shell {
     grid-template-columns: 1fr;
-    padding: 10px;
+    padding: 4px !important;
+    gap: 4px !important;
   }
 
   .content-shell {
-    padding: 0 0 20px;
+    padding: 0 2px 80px !important;
   }
 
   .mobile-menu-btn,
@@ -1302,7 +1338,7 @@ body.app-locked .page-shell {
 
 .content-shell {
   min-width: 0;
-  padding-bottom: 24px;
+  padding: 0 2px 4px !important;
 }
 
 .sidebar {
@@ -1413,9 +1449,9 @@ body {
 .content-shell {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 36px);
+  height: calc(100vh - 8px) !important;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 0 2px 4px !important;
 }
 
 .main-content {
@@ -1651,8 +1687,7 @@ body {
     height: 100vh;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 0;
-    padding-bottom: 140px;
+    padding: 0 2px 80px !important;
   }
 }
 
@@ -2022,9 +2057,13 @@ body {
 }
 
 .sidebar-top {
-  display: grid;
-  gap: 10px;
-  padding: 2px 2px 0;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 0 6px 0;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
 }
 
 .sidebar .brand-block {

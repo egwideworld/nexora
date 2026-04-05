@@ -4,7 +4,8 @@ export const STORAGE_KEYS = {
   favorites: 'nexora.favorites',
   progress: 'nexora.progress',
   recents: 'nexora.recents',
-  libraries: 'nexora.libraries'
+  libraries: 'nexora.libraries',
+  sidebarOpen: 'nexora.sidebarOpen'
 };
 
 export function safeParse(value, fallback) {
